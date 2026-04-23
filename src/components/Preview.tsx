@@ -505,6 +505,9 @@ export default function Preview({
   const hasScreen = !!screenStream;
   const hasCamera = !!cameraStream;
 
+  // Режим обрезки активен если Ctrl зажат ИЛИ зафиксирован кнопкой
+  const cropActive = altHeld || cropModeLocked;
+
   // CSS clip-path для обрезки
   const getCropStyle = (crop: CropSettings): React.CSSProperties => {
     const hasCrop = crop.top > 0 || crop.bottom > 0 || crop.left > 0 || crop.right > 0;
@@ -576,8 +579,6 @@ export default function Preview({
   };
 
   const effectiveAspectRatio = getAspectRatio(aspectPreset);
-  // Режим обрезки активен если Ctrl зажат ИЛИ зафиксирован кнопкой
-  const cropActive = altHeld || cropModeLocked;
 
   return (
     <div className="preview">
