@@ -1,5 +1,4 @@
 import { useState, useEffect, useRef } from "react";
-import { fetch as tauriFetch } from "@tauri-apps/plugin-http";
 
 export interface UserInfo {
   id: number;
@@ -21,6 +20,44 @@ interface Props {
 
 // URL платформы КОНТЕНТУМ (punycode — WKWebView не резолвит кириллические домены напрямую)
 const PLATFORM_URL = "https://xn--e1ajhcbd3acj.xn--p1ai";
+
+/**
+ * Безопасное извлечение сообщения из ошибки любого типа.
+ * tauriFetch может бросать не-Error объекты (строки, объекты без .message).
+ */
+function getErrorMessage(err: unknown): string {
+  if (err instanceof Error) return err.message;
+  if (typeof err === "string") return err;
+  if (err && typeof err === "object") {
+    // Tauri HTTP plugin может вернуть { message: string } или { error: string }
+    const obj = err as Record<string, unknown>;
+    if (typeof obj.message === "string") return obj.message;
+    if (typeof obj.error === "string") return obj.error;
+    try {
+      return JSON.stringify(err);
+    } catch {
+      return String(err);
+    }
+  }
+  return "Неизвестная ошибка";
+}
+
+/**
+ * HTTP fetch с поддержкой Tauri plugin-http и fallback на нативный fetch.
+ * Tauri plugin-http может не работать если плагин не зарегистрирован.
+ */
+async function safeFetch(url: string, options?: RequestInit): Promise<Response> {
+  try {
+    // Пробуем Tauri HTTP plugin (обходит CORS)
+    const { fetch: tauriFetch } = await import("@tauri-apps/plugin-http");
+    const resp = await tauriFetch(url, options as any);
+    return resp as unknown as Response;
+  } catch (e) {
+    console.warn("Tauri HTTP plugin недоступен, используем нативный fetch:", getErrorMessage(e));
+    // Fallback на нативный fetch
+    return await fetch(url, options);
+  }
+}
 
 /**
  * Экран авторизации через MAX.
@@ -64,56 +101,96 @@ export default function AuthScreen({ onAuth }: Props) {
     setError("");
 
     try {
+      console.log("Авторизация MAX: инициализация...");
+
       // Шаг 1: инициализируем сессию авторизации на сервере
-      const initResp = await tauriFetch(`${PLATFORM_URL}/vebinar/api/max-auth-init`, {
+      const initResp = await safeFetch(`${PLATFORM_URL}/vebinar/api/max-auth-init`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({}),
       });
 
       if (!initResp.ok) {
-        throw new Error(`Ошибка сервера: ${initResp.status}`);
+        const statusText = initResp.statusText || `код ${initResp.status}`;
+        throw new Error(`Сервер вернул ошибку: ${statusText} (${initResp.status})`);
       }
 
-      const { code, deepLink } = await initResp.json();
-      authCode.current = code;
+      let data: any;
+      try {
+        data = await initResp.json();
+      } catch {
+        throw new Error("Сервер вернул невалидный ответ (не JSON)");
+      }
+
+      console.log("MAX auth init:", JSON.stringify(data));
+
+      if (!data.code || !data.deepLink) {
+        throw new Error("Сервер не вернул код авторизации");
+      }
+
+      authCode.current = data.code;
 
       // Шаг 2: открываем deepLink в системном браузере
-      // (https://max.ru/id..._bot?start=wbr_{code})
-      const { open } = await import("@tauri-apps/plugin-shell");
-      await open(deepLink);
+      console.log("Открываем MAX:", data.deepLink);
+      try {
+        const { open } = await import("@tauri-apps/plugin-shell");
+        await open(data.deepLink);
+      } catch {
+        // Fallback — открываем через window.open
+        window.open(data.deepLink, "_blank");
+      }
 
       // Шаг 3: переходим в режим ожидания и начинаем поллинг
       setMode("polling");
+      setLoading(false);
       setPollStatus("Откройте MAX и подтвердите вход...");
 
+      let pollCount = 0;
+      const MAX_POLLS = 90; // 3 минуты (90 * 2 сек)
+
       pollTimer.current = setInterval(async () => {
+        pollCount++;
+
+        if (pollCount > MAX_POLLS) {
+          stopPolling();
+          setMode("choice");
+          setError("Время ожидания истекло (3 мин). Попробуйте ещё раз.");
+          return;
+        }
+
         try {
-          const pollResp = await tauriFetch(
+          const pollResp = await safeFetch(
             `${PLATFORM_URL}/vebinar/api/max-auth-poll?code=${authCode.current}`
           );
 
           if (!pollResp.ok) {
             stopPolling();
             setMode("choice");
-            setError("Сессия истекла. Попробуйте ещё раз.");
+            setError(`Ошибка поллинга: ${pollResp.status}. Попробуйте ещё раз.`);
             return;
           }
 
-          const data = await pollResp.json();
+          let pollData: any;
+          try {
+            pollData = await pollResp.json();
+          } catch {
+            return; // Невалидный JSON — пропускаем итерацию
+          }
 
-          if (!data.ready) {
-            setPollStatus("Ожидаем подтверждение в MAX...");
+          if (!pollData.ready) {
+            setPollStatus(`Ожидаем подтверждение в MAX... (${pollCount * 2} сек)`);
             return;
           }
 
           // Авторизован!
           stopPolling();
           setPollStatus("Авторизован! Создаём комнату...");
+          console.log("MAX auth подтверждена:", JSON.stringify(pollData));
 
-          const { hostToken, displayName: userName, user } = data;
+          const { hostToken, displayName: userName, user } = pollData;
 
           // Шаг 4: создаём комнату вебинара
-          const roomResp = await tauriFetch(`${PLATFORM_URL}/vebinar/api/create-room`, {
+          const roomResp = await safeFetch(`${PLATFORM_URL}/vebinar/api/create-room`, {
             method: "POST",
             headers: {
               "Content-Type": "application/json",
@@ -123,23 +200,29 @@ export default function AuthScreen({ onAuth }: Props) {
           });
 
           if (!roomResp.ok) {
-            throw new Error("Не удалось создать комнату");
+            const errorText = await roomResp.text().catch(() => "");
+            throw new Error(`Не удалось создать комнату: ${roomResp.status} ${errorText}`);
           }
 
-          const { roomId } = await roomResp.json();
+          const roomData = await roomResp.json();
+          const { roomId } = roomData;
+          console.log("Комната создана:", roomId);
 
           // Шаг 5: получаем LiveKit токен ведущего
-          const tokenResp = await tauriFetch(`${PLATFORM_URL}/vebinar/api/token`, {
+          const tokenResp = await safeFetch(`${PLATFORM_URL}/vebinar/api/token`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ room: roomId, name: userName, role: "presenter" }),
           });
 
           if (!tokenResp.ok) {
-            throw new Error("Не удалось получить токен LiveKit");
+            const errorText = await tokenResp.text().catch(() => "");
+            throw new Error(`Не удалось получить токен: ${tokenResp.status} ${errorText}`);
           }
 
-          const { token: lkToken, wsUrl } = await tokenResp.json();
+          const tokenData = await tokenResp.json();
+          const { token: lkToken, wsUrl } = tokenData;
+          console.log("LiveKit токен получен, wsUrl:", wsUrl);
 
           // Готово — передаём результат в App
           onAuth({
@@ -153,15 +236,18 @@ export default function AuthScreen({ onAuth }: Props) {
             hostToken,
             roomId,
           });
-        } catch (e: any) {
+        } catch (e: unknown) {
           stopPolling();
           setMode("choice");
-          setError(`Ошибка авторизации: ${e.message}`);
+          setError(`Ошибка авторизации: ${getErrorMessage(e)}`);
+          console.error("MAX auth error:", getErrorMessage(e));
         }
       }, 2000);
-    } catch (err: any) {
+    } catch (err: unknown) {
       setMode("choice");
-      setError(`Не удалось подключиться к платформе: ${err.message}`);
+      const msg = getErrorMessage(err);
+      setError(`Не удалось подключиться к платформе: ${msg}`);
+      console.error("MAX auth init error:", msg);
     } finally {
       setLoading(false);
     }

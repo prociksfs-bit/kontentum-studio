@@ -1045,6 +1045,97 @@ body::before {
   border-top: 1px solid var(--border);
 }
 
+/* Широкая модалка (настройки) */
+.modal-wide {
+  width: 600px;
+}
+
+/* Секции настроек */
+.settings-section {
+  padding: 16px 0;
+  border-bottom: 1px solid var(--border);
+}
+
+.settings-section:last-child {
+  border-bottom: none;
+}
+
+.settings-section-title {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 3px;
+  text-transform: uppercase;
+  color: var(--cyan);
+  font-family: 'JetBrains Mono', monospace;
+  margin-bottom: 12px;
+}
+
+/* Информация о кодировщике */
+.encoder-info {
+  background: rgba(0, 8, 24, 0.5);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 12px 14px;
+  margin-top: 8px;
+  font-size: 12px;
+  color: var(--text);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+[data-theme="light"] .encoder-info {
+  background: rgba(0, 20, 60, 0.04);
+}
+
+.encoder-info-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.encoder-info-label {
+  color: var(--muted);
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 10px;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  min-width: 90px;
+}
+
+.encoder-codec-badge {
+  display: inline-block;
+  background: rgba(0, 245, 255, 0.12);
+  color: var(--cyan);
+  border: 1px solid rgba(0, 245, 255, 0.25);
+  border-radius: 6px;
+  padding: 2px 8px;
+  font-size: 11px;
+  font-weight: 700;
+  font-family: 'JetBrains Mono', monospace;
+  letter-spacing: 1px;
+}
+
+.encoder-info-note {
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.encoder-recommendation {
+  margin-top: 4px;
+  padding: 8px 10px;
+  background: rgba(0, 245, 255, 0.06);
+  border-left: 3px solid var(--cyan);
+  border-radius: 0 8px 8px 0;
+  font-size: 12px;
+  color: var(--text);
+}
+
+.encoder-recommendation strong {
+  color: var(--cyan);
+}
+
 /* Поля формы */
 .field {
   display: flex;

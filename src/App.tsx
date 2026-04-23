@@ -12,6 +12,9 @@ import ChatPanel from "./components/ChatPanel";
 import { useAppLogger } from "./lib/useAppLogger";
 import { useUpdateChecker } from "./lib/useUpdateChecker";
 
+/** Тип кодировщика */
+export type EncoderType = "auto" | "videotoolbox" | "nvenc" | "qsv" | "cpu";
+
 /** Конфигурация стрима */
 export interface StreamConfig {
   serverUrl: string;
@@ -20,6 +23,7 @@ export interface StreamConfig {
   resolution: "720p" | "1080p";
   fps: number;
   bitrate: number;
+  encoder: EncoderType;
 }
 
 /** Источник медиа */
@@ -74,6 +78,7 @@ export default function App() {
     resolution: "1080p",
     fps: 30,
     bitrate: 4000,
+    encoder: "auto",
   });
 
   const [sources, setSources] = useState<MediaSource[]>([
