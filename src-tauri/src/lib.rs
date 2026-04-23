@@ -12,6 +12,8 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             commands::get_app_info,
             commands::get_platform,
+            commands::detect_encoders,
+            commands::get_system_info,
         ])
         .run(tauri::generate_context!())
         .expect("Ошибка запуска КОНТЕНТУМ Studio");

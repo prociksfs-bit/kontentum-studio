@@ -12,9 +12,35 @@ import ChatPanel from "./components/ChatPanel";
 import { useAppLogger } from "./lib/useAppLogger";
 import { useUpdateChecker } from "./lib/useUpdateChecker";
 import { useLiveKit } from "./lib/useLiveKit";
+import { useConnectionQuality } from "./lib/useConnectionQuality";
+import { invoke } from "@tauri-apps/api/core";
 
 /** Тип кодировщика */
-export type EncoderType = "auto" | "videotoolbox" | "nvenc" | "qsv" | "cpu";
+export type EncoderType = "auto" | "videotoolbox" | "nvenc" | "qsv" | "amf" | "cpu";
+
+/** Информация о кодировщике (из Rust бэкенда) */
+export interface EncoderInfo {
+  name: string;
+  encoder_type: "hw" | "sw";
+  platform: string;
+  label: string;
+  available: boolean;
+  estimated_cpu_usage: number;
+}
+
+/** Результат детекции кодировщиков */
+export interface EncoderDetectionResult {
+  encoders: EncoderInfo[];
+  recommended: string;
+}
+
+/** Информация о системе */
+export interface SystemInfo {
+  os: string;
+  arch: string;
+  cpu_cores: number;
+  gpu_name: string | null;
+}
 
 /** Конфигурация стрима */
 export interface StreamConfig {
@@ -60,10 +86,36 @@ export default function App() {
   const [showLogs, setShowLogs] = useState(true);
 
   // Обновления
-  const { checking, updateInfo, error: updateError, installing, checkForUpdates, openDownload, dismiss } = useUpdateChecker();
+  const { status: updateStatus, updateInfo, progress: updateProgress, errorMessage: updateError, checkForUpdates, installUpdate, dismiss } = useUpdateChecker();
 
   // LiveKit
   const liveKit = useLiveKit();
+
+  // Мониторинг качества соединения
+  const { stats: connectionStats, qualityLabel, qualityColor } = useConnectionQuality(liveKit.getRoom());
+
+  // Детекция аппаратных кодировщиков
+  const [encoderDetection, setEncoderDetection] = useState<EncoderDetectionResult | null>(null);
+  const [systemInfo, setSystemInfo] = useState<SystemInfo | null>(null);
+
+  // Запрашиваем информацию о кодировщиках и системе при старте
+  useEffect(() => {
+    (async () => {
+      try {
+        const [encoders, sysInfo] = await Promise.all([
+          invoke<EncoderDetectionResult>("detect_encoders"),
+          invoke<SystemInfo>("get_system_info"),
+        ]);
+        setEncoderDetection(encoders);
+        setSystemInfo(sysInfo);
+        console.log(`Система: ${sysInfo.os} ${sysInfo.arch}, ядер CPU: ${sysInfo.cpu_cores}, GPU: ${sysInfo.gpu_name || "не определён"}`);
+        console.log(`Рекомендуемый кодировщик: ${encoders.recommended}`);
+        console.log(`Доступные кодировщики: ${encoders.encoders.filter((e) => e.available).map((e) => e.name).join(", ")}`);
+      } catch (err) {
+        console.warn("Не удалось определить кодировщики (вне Tauri?):", err);
+      }
+    })();
+  }, []);
 
   // Авторизация
   const [user, setUser] = useState<UserInfo | null>(null);
@@ -363,7 +415,7 @@ export default function App() {
         }
       }
 
-      await liveKit.connect(config.serverUrl, config.token, combinedStream, screenStream);
+      await liveKit.connect(config.serverUrl, config.token, combinedStream, screenStream, config);
       setIsLive(true);
       console.log("Эфир начат ✅");
     } else {
@@ -388,12 +440,12 @@ export default function App() {
 
       {/* Баннер обновлений */}
       <UpdateBanner
-        checking={checking}
+        status={updateStatus}
         updateInfo={updateInfo}
-        error={updateError}
-        installing={installing}
+        progress={updateProgress}
+        errorMessage={updateError}
         onCheck={checkForUpdates}
-        onDownload={openDownload}
+        onInstall={installUpdate}
         onDismiss={dismiss}
       />
 
@@ -403,6 +455,10 @@ export default function App() {
           config={config}
           onChange={setConfig}
           onClose={() => setView("main")}
+          encoderDetection={encoderDetection}
+          systemInfo={systemInfo}
+          isLive={isLive}
+          connectionStats={connectionStats}
         />
       )}
 
@@ -415,6 +471,9 @@ export default function App() {
         theme={theme}
         onToggleTheme={toggleTheme}
         participantCount={liveKit.participantCount}
+        connectionStats={connectionStats}
+        qualityLabel={qualityLabel()}
+        qualityColor={qualityColor()}
       />
 
       {/* Основной layout */}
@@ -493,7 +552,7 @@ export default function App() {
         onToggleLogs={() => setShowLogs((v) => !v)}
         onToggleChat={() => setShowChat((v) => !v)}
         onCheckUpdates={checkForUpdates}
-        checkingUpdates={checking}
+        checkingUpdates={updateStatus === "checking"}
         showLogs={showLogs}
         showChat={showChat}
         hostToken={hostToken}

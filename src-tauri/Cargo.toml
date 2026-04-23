@@ -1,6 +1,6 @@
 [package]
 name = "kontentum-studio"
-version = "0.7.0"
+version = "0.8.0"
 description = "КОНТЕНТУМ Studio — десктопный стриминг-клиент"
 authors = ["КОНТЕНТУМ"]
 edition = "2021"
