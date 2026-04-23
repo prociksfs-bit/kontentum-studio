@@ -18,8 +18,8 @@ interface Props {
   onAuth: (result: AuthResult) => void;
 }
 
-// URL платформы КОНТЕНТУМ
-const PLATFORM_URL = "https://контентум.рф";
+// URL платформы КОНТЕНТУМ (punycode — WKWebView не резолвит кириллические домены напрямую)
+const PLATFORM_URL = "https://xn--e1ajhcbd3acj.xn--p1ai";
 
 /**
  * Экран авторизации через MAX.
