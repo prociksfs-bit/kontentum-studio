@@ -7,6 +7,10 @@ interface Props {
   onClose: () => void;
 }
 
+/**
+ * Модалка подключения к LiveKit серверу.
+ * Используется как fallback из настроек.
+ */
 export default function ConnectionModal({ config, onConnect, onClose }: Props) {
   const [serverUrl, setServerUrl] = useState(config.serverUrl || "");
   const [token, setToken] = useState(config.token || "");
@@ -35,7 +39,7 @@ export default function ConnectionModal({ config, onConnect, onClose }: Props) {
     <div className="modal-overlay" onClick={onClose}>
       <div className="modal" onClick={(e) => e.stopPropagation()}>
         <div className="modal-header">
-          <h2>🔗 Подключение к платформе</h2>
+          <h2>Подключение к платформе</h2>
           <button className="modal-close" onClick={onClose}>✕</button>
         </div>
 
@@ -64,7 +68,7 @@ export default function ConnectionModal({ config, onConnect, onClose }: Props) {
           </div>
 
           <div className="field">
-            <label>Название комнаты (опционально)</label>
+            <label>Название комнаты</label>
             <input
               type="text"
               value={roomName}

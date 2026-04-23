@@ -1,113 +1,242 @@
-import type { MediaSource, Scene } from "../App";
+import { useState, useEffect, useCallback } from "react";
+import type { MediaSource } from "../App";
+import { useMediaDevices } from "../lib/useMediaDevices";
+
+interface CropSettings {
+  top: number;
+  bottom: number;
+  left: number;
+  right: number;
+}
 
 interface Props {
   sources: MediaSource[];
-  scenes: Scene[];
-  activeSceneId: string;
-  onSelectScene: (id: string) => void;
+  cameraStream: MediaStream | null;
+  screenStream: MediaStream | null;
   onToggleSource: (id: string) => void;
-  onAddSource: (source: MediaSource) => void;
+  onUpdateSource: (id: string, updates: Partial<MediaSource>) => void;
+  onStartScreenCapture: () => void;
+  onStopScreenCapture: () => void;
+  cameraCrop: CropSettings;
+  screenCrop: CropSettings;
+  onCameraCropChange: (crop: CropSettings) => void;
+  onScreenCropChange: (crop: CropSettings) => void;
+  pipShape: "rect" | "round";
+  onPipShapeChange: (shape: "rect" | "round") => void;
 }
 
+/**
+ * Боковая панель с управлением устройствами, захватом экрана и кроппингом.
+ */
 export default function Sidebar({
   sources,
-  scenes,
-  activeSceneId,
-  onSelectScene,
+  cameraStream,
+  screenStream,
   onToggleSource,
-  onAddSource,
+  onUpdateSource,
+  onStartScreenCapture,
+  onStopScreenCapture,
+  cameraCrop,
+  screenCrop,
+  onCameraCropChange,
+  onScreenCropChange,
+  pipShape,
+  onPipShapeChange,
 }: Props) {
-  const handleAddCamera = async () => {
-    try {
-      const devices = await navigator.mediaDevices.enumerateDevices();
-      const cameras = devices.filter((d) => d.kind === "videoinput");
-      if (cameras.length > 0) {
-        const cam = cameras[0];
-        onAddSource({
-          id: `cam-${Date.now()}`,
-          type: "camera",
-          label: cam.label || "Камера",
-          enabled: true,
-          deviceId: cam.deviceId,
-        });
-      }
-    } catch (err) {
-      console.error("Ошибка получения устройств:", err);
-    }
-  };
+  const { cameras, microphones, refreshDevices } = useMediaDevices();
+  const [devicesLoaded, setDevicesLoaded] = useState(false);
 
-  const handleAddScreen = () => {
-    onAddSource({
-      id: `screen-${Date.now()}`,
-      type: "screen",
-      label: "Захват экрана",
-      enabled: true,
-    });
-  };
+  const cameraSource = sources.find((s) => s.type === "camera");
+  const micSource = sources.find((s) => s.type === "microphone");
+
+  // Загрузить устройства при монтировании
+  useEffect(() => {
+    refreshDevices().then(() => setDevicesLoaded(true));
+  }, [refreshDevices]);
+
+  // Обработчик выбора камеры
+  const handleCameraSelect = useCallback(
+    (deviceId: string) => {
+      if (cameraSource) {
+        onUpdateSource(cameraSource.id, { deviceId, label: cameras.find((c) => c.deviceId === deviceId)?.label || "Камера" });
+      }
+    },
+    [cameraSource, cameras, onUpdateSource],
+  );
+
+  // Обработчик выбора микрофона
+  const handleMicSelect = useCallback(
+    (deviceId: string) => {
+      if (micSource) {
+        onUpdateSource(micSource.id, { deviceId, label: microphones.find((m) => m.deviceId === deviceId)?.label || "Микрофон" });
+      }
+    },
+    [micSource, microphones, onUpdateSource],
+  );
 
   return (
     <aside className="sidebar">
-      {/* Логотип */}
-      <div className="sidebar-logo">
-        <span className="logo-icon">🤖</span>
-        <span className="logo-text">КОНТЕНТУМ</span>
-      </div>
-
-      {/* Сцены */}
+      {/* Камера */}
       <div className="sidebar-section">
-        <h3>Сцены</h3>
-        <div className="scene-list">
-          {scenes.map((scene) => (
+        <h3>Камера</h3>
+        <div className="device-group">
+          <div className="device-group-header">
+            <span className="device-group-title">
+              📷 Видео
+            </span>
             <button
-              key={scene.id}
-              className={`scene-item ${scene.id === activeSceneId ? "active" : ""}`}
-              onClick={() => onSelectScene(scene.id)}
+              className={`device-toggle ${cameraSource?.enabled ? "on" : "off"}`}
+              onClick={() => cameraSource && onToggleSource(cameraSource.id)}
             >
-              🎬 {scene.name}
+              {cameraSource?.enabled ? "ON" : "OFF"}
             </button>
-          ))}
-        </div>
-      </div>
+          </div>
 
-      {/* Источники */}
-      <div className="sidebar-section">
-        <h3>Источники</h3>
-        <div className="source-list">
-          {sources.map((source) => (
-            <div key={source.id} className="source-item">
-              <button
-                className={`source-toggle ${source.enabled ? "on" : "off"}`}
-                onClick={() => onToggleSource(source.id)}
-              >
-                {source.type === "camera" && "📷"}
-                {source.type === "microphone" && "🎤"}
-                {source.type === "screen" && "🖥️"}
-              </button>
-              <span className="source-label">{source.label}</span>
-              <span className={`source-status ${source.enabled ? "on" : "off"}`}>
-                {source.enabled ? "ON" : "OFF"}
-              </span>
+          {cameras.length > 0 ? (
+            <select
+              className="device-select"
+              value={cameraSource?.deviceId || ""}
+              onChange={(e) => handleCameraSelect(e.target.value)}
+            >
+              {cameras.map((cam) => (
+                <option key={cam.deviceId} value={cam.deviceId}>
+                  {cam.label}
+                </option>
+              ))}
+            </select>
+          ) : (
+            <div style={{ fontSize: 11, color: "var(--muted)", padding: "6px 0" }}>
+              {devicesLoaded ? "Камеры не найдены" : "Загрузка устройств..."}
             </div>
-          ))}
-        </div>
+          )}
 
-        <div className="source-actions">
-          <button className="btn-add" onClick={handleAddCamera}>
-            + Камера
-          </button>
-          <button className="btn-add" onClick={handleAddScreen}>
-            + Экран
-          </button>
+          {/* Форма камеры PiP */}
+          {cameraSource?.enabled && screenStream && (
+            <div className="pip-shape-row">
+              <button
+                className={`pip-shape-btn ${pipShape === "rect" ? "active" : ""}`}
+                onClick={() => onPipShapeChange("rect")}
+              >
+                Прямоугольная
+              </button>
+              <button
+                className={`pip-shape-btn ${pipShape === "round" ? "active" : ""}`}
+                onClick={() => onPipShapeChange("round")}
+              >
+                Круглая
+              </button>
+            </div>
+          )}
+
+          {/* Кроппинг камеры */}
+          {cameraSource?.enabled && cameraStream && (
+            <div className="crop-section">
+              <div className="crop-title">Обрезка камеры</div>
+              {(["top", "bottom", "left", "right"] as const).map((side) => (
+                <div className="crop-row" key={side}>
+                  <span className="crop-label">
+                    {side === "top" ? "Верх" : side === "bottom" ? "Низ" : side === "left" ? "Лево" : "Право"}
+                  </span>
+                  <input
+                    type="range"
+                    className="crop-slider"
+                    min={0}
+                    max={40}
+                    value={cameraCrop[side]}
+                    onChange={(e) => onCameraCropChange({ ...cameraCrop, [side]: Number(e.target.value) })}
+                  />
+                  <span className="crop-value">{cameraCrop[side]}%</span>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
       </div>
 
-      {/* Оверлеи (будущее) */}
+      {/* Микрофон */}
       <div className="sidebar-section">
-        <h3>Оверлеи</h3>
-        <div className="overlay-placeholder">
-          <span>🏷️ Логотип</span>
-          <span>📝 Текст</span>
-          <span>⏱️ Таймер</span>
+        <h3>Микрофон</h3>
+        <div className="device-group">
+          <div className="device-group-header">
+            <span className="device-group-title">
+              🎤 Аудио
+            </span>
+            <button
+              className={`device-toggle ${micSource?.enabled ? "on" : "off"}`}
+              onClick={() => micSource && onToggleSource(micSource.id)}
+            >
+              {micSource?.enabled ? "ON" : "OFF"}
+            </button>
+          </div>
+
+          {microphones.length > 0 ? (
+            <select
+              className="device-select"
+              value={micSource?.deviceId || ""}
+              onChange={(e) => handleMicSelect(e.target.value)}
+            >
+              {microphones.map((mic) => (
+                <option key={mic.deviceId} value={mic.deviceId}>
+                  {mic.label}
+                </option>
+              ))}
+            </select>
+          ) : (
+            <div style={{ fontSize: 11, color: "var(--muted)", padding: "6px 0" }}>
+              {devicesLoaded ? "Микрофоны не найдены" : "Загрузка устройств..."}
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Захват экрана */}
+      <div className="sidebar-section">
+        <h3>Захват экрана</h3>
+        <div className="screen-capture-section">
+          {!screenStream ? (
+            <>
+              <button
+                className="screen-mode-btn"
+                onClick={onStartScreenCapture}
+                style={{ width: "100%", marginBottom: 0 }}
+              >
+                🖥 Выбрать экран или окно
+              </button>
+              <div style={{ fontSize: 10, color: "var(--muted)", marginTop: 6 }}>
+                Система предложит выбрать весь экран или конкретное окно
+              </div>
+            </>
+          ) : (
+            <>
+              <div className="screen-status">
+                🖥 Захват активен
+                <button className="screen-stop-btn" onClick={onStopScreenCapture}>
+                  Остановить
+                </button>
+              </div>
+
+              {/* Кроппинг экрана */}
+              <div className="crop-section">
+                <div className="crop-title">Обрезка экрана</div>
+                {(["top", "bottom", "left", "right"] as const).map((side) => (
+                  <div className="crop-row" key={side}>
+                    <span className="crop-label">
+                      {side === "top" ? "Верх" : side === "bottom" ? "Низ" : side === "left" ? "Лево" : "Право"}
+                    </span>
+                    <input
+                      type="range"
+                      className="crop-slider"
+                      min={0}
+                      max={40}
+                      value={screenCrop[side]}
+                      onChange={(e) => onScreenCropChange({ ...screenCrop, [side]: Number(e.target.value) })}
+                    />
+                    <span className="crop-value">{screenCrop[side]}%</span>
+                  </div>
+                ))}
+              </div>
+            </>
+          )}
         </div>
       </div>
     </aside>

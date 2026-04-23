@@ -1,87 +1,37 @@
 import { useEffect, useRef } from "react";
 import type { MediaSource } from "../App";
 
+interface CropSettings {
+  top: number;
+  bottom: number;
+  left: number;
+  right: number;
+}
+
 interface Props {
   sources: MediaSource[];
   cameraStream: MediaStream | null;
   screenStream: MediaStream | null;
-  setCameraStream: (s: MediaStream | null) => void;
-  setScreenStream: (s: MediaStream | null) => void;
   isLive: boolean;
+  cameraCrop: CropSettings;
+  screenCrop: CropSettings;
+  pipShape: "rect" | "round";
 }
 
-/** Проверка доступности MediaDevices API */
-function hasMediaDevices(): boolean {
-  return !!(navigator && navigator.mediaDevices && navigator.mediaDevices.getUserMedia);
-}
-
+/**
+ * Область предпросмотра видео с поддержкой кроппинга и PiP.
+ */
 export default function Preview({
   sources,
   cameraStream,
   screenStream,
-  setCameraStream,
-  setScreenStream,
   isLive,
+  cameraCrop,
+  screenCrop,
+  pipShape,
 }: Props) {
   const cameraRef = useRef<HTMLVideoElement>(null);
   const screenRef = useRef<HTMLVideoElement>(null);
-
-  // Захват камеры
-  const cameraSource = sources.find((s) => s.type === "camera" && s.enabled);
-  const screenSource = sources.find((s) => s.type === "screen" && s.enabled);
-
-  useEffect(() => {
-    if (cameraSource && !cameraStream) {
-      if (!hasMediaDevices()) {
-        console.warn("MediaDevices API недоступен — камера не может быть захвачена");
-        return;
-      }
-      try {
-        navigator.mediaDevices
-          .getUserMedia({
-            video: { deviceId: cameraSource.deviceId ? { exact: cameraSource.deviceId } : undefined },
-            audio: false,
-          })
-          .then((stream) => {
-            setCameraStream(stream);
-          })
-          .catch((err) => console.error("Ошибка захвата камеры:", err));
-      } catch (err) {
-        console.error("Критическая ошибка при запросе камеры:", err);
-      }
-    }
-
-    if (!cameraSource && cameraStream) {
-      cameraStream.getTracks().forEach((t) => t.stop());
-      setCameraStream(null);
-    }
-  }, [cameraSource, cameraStream, setCameraStream]);
-
-  useEffect(() => {
-    if (screenSource && !screenStream) {
-      if (!hasMediaDevices()) {
-        console.warn("MediaDevices API недоступен — захват экрана невозможен");
-        return;
-      }
-      try {
-        navigator.mediaDevices
-          .getDisplayMedia({ video: true, audio: true })
-          .then((stream) => {
-            setScreenStream(stream);
-            // Обработка остановки захвата пользователем
-            stream.getVideoTracks()[0].onended = () => setScreenStream(null);
-          })
-          .catch((err) => console.error("Ошибка захвата экрана:", err));
-      } catch (err) {
-        console.error("Критическая ошибка при запросе экрана:", err);
-      }
-    }
-
-    if (!screenSource && screenStream) {
-      screenStream.getTracks().forEach((t) => t.stop());
-      setScreenStream(null);
-    }
-  }, [screenSource, screenStream, setScreenStream]);
 
   // Привязка потоков к video элементам
   useEffect(() => {
@@ -99,43 +49,113 @@ export default function Preview({
   const hasScreen = !!screenStream;
   const hasCamera = !!cameraStream;
 
+  // Стиль кроппинга для камеры
+  const getCropStyle = (crop: CropSettings, mode: "full" | "pip"): React.CSSProperties => {
+    const hasCrop = crop.top > 0 || crop.bottom > 0 || crop.left > 0 || crop.right > 0;
+    if (!hasCrop) return {};
+
+    // Используем object-position + scale для эмуляции кроппинга
+    const scaleX = 100 / (100 - crop.left - crop.right);
+    const scaleY = 100 / (100 - crop.top - crop.bottom);
+    const scale = Math.max(scaleX, scaleY);
+
+    const translateX = ((crop.left - crop.right) / 2) * scale;
+    const translateY = ((crop.top - crop.bottom) / 2) * scale;
+
+    return {
+      transform: `scale(${scale}) translate(${-translateX}%, ${-translateY}%)`,
+      transformOrigin: "center center",
+    };
+  };
+
+  // Стиль кроппинга для экрана
+  const getScreenCropStyle = (): React.CSSProperties => {
+    const crop = screenCrop;
+    const hasCrop = crop.top > 0 || crop.bottom > 0 || crop.left > 0 || crop.right > 0;
+    if (!hasCrop) return {};
+
+    const scaleX = 100 / (100 - crop.left - crop.right);
+    const scaleY = 100 / (100 - crop.top - crop.bottom);
+    const scale = Math.max(scaleX, scaleY);
+
+    const translateX = ((crop.left - crop.right) / 2) * scale;
+    const translateY = ((crop.top - crop.bottom) / 2) * scale;
+
+    return {
+      transform: `scale(${scale}) translate(${-translateX}%, ${-translateY}%)`,
+      transformOrigin: "center center",
+    };
+  };
+
   return (
     <div className="preview">
       {/* Индикатор LIVE */}
       {isLive && (
-        <div className="live-badge">
+        <div className="live-pill" style={{ position: "absolute", top: 12, left: 12, zIndex: 10 }}>
           <span className="live-dot" />
           LIVE
         </div>
       )}
 
       {/* Основная область */}
-      <div className={`preview-canvas ${hasScreen ? "with-screen" : ""}`}>
+      <div className="preview-canvas">
         {hasScreen && (
-          <video
-            ref={screenRef}
-            className="preview-screen"
-            autoPlay
-            playsInline
-            muted
-          />
+          <div style={{ width: "100%", height: "100%", overflow: "hidden", position: "relative" }}>
+            <video
+              ref={screenRef}
+              className="preview-screen"
+              autoPlay
+              playsInline
+              muted
+              style={getScreenCropStyle()}
+            />
+          </div>
         )}
 
         {hasCamera && (
-          <video
-            ref={cameraRef}
-            className={`preview-camera ${hasScreen ? "pip" : "full"}`}
-            autoPlay
-            playsInline
-            muted
-          />
+          <div
+            className={hasScreen ? "pip-wrapper" : ""}
+            style={hasScreen ? {
+              position: "absolute",
+              bottom: 12,
+              right: 12,
+              width: pipShape === "round" ? 130 : 200,
+              height: pipShape === "round" ? 130 : 125,
+              borderRadius: pipShape === "round" ? "50%" : 14,
+              overflow: "hidden",
+              border: "2px solid rgba(0, 245, 255, 0.3)",
+              boxShadow: "0 0 20px rgba(0, 245, 255, 0.15)",
+              zIndex: 5,
+              cursor: "grab",
+            } : { width: "100%", height: "100%", overflow: "hidden" }}
+          >
+            <video
+              ref={cameraRef}
+              className={`preview-camera ${hasScreen ? "pip" : "full"}`}
+              autoPlay
+              playsInline
+              muted
+              style={{
+                ...getCropStyle(cameraCrop, hasScreen ? "pip" : "full"),
+                width: "100%",
+                height: "100%",
+                objectFit: "cover",
+                ...(hasScreen ? {
+                  position: "static",
+                  border: "none",
+                  borderRadius: 0,
+                  boxShadow: "none",
+                } : {}),
+              }}
+            />
+          </div>
         )}
 
         {!hasCamera && !hasScreen && (
           <div className="preview-placeholder">
-            <div className="placeholder-icon">📷</div>
+            <div className="placeholder-icon">📡</div>
             <div className="placeholder-text">
-              Включите камеру или захват экрана
+              Подключите камеру или захватите экран
             </div>
           </div>
         )}

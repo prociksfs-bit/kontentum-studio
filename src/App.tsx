@@ -1,8 +1,9 @@
 import { useState, useCallback } from "react";
+import AuthScreen from "./components/AuthScreen";
+import type { AuthResult, UserInfo } from "./components/AuthScreen";
 import Sidebar from "./components/Sidebar";
 import Preview from "./components/Preview";
 import Controls from "./components/Controls";
-import ConnectionModal from "./components/ConnectionModal";
 import SettingsPanel from "./components/SettingsPanel";
 
 /** Конфигурация стрима */
@@ -24,18 +25,27 @@ export interface MediaSource {
   deviceId?: string;
 }
 
-/** Сцена */
-export interface Scene {
-  id: string;
-  name: string;
-  sources: string[];
+/** Настройки обрезки */
+interface CropSettings {
+  top: number;
+  bottom: number;
+  left: number;
+  right: number;
 }
 
-export type AppView = "main" | "settings" | "connect";
+export type AppView = "main" | "settings";
+
+/** Проверка доступности MediaDevices API */
+function hasMediaDevices(): boolean {
+  return !!(navigator && navigator.mediaDevices);
+}
 
 export default function App() {
+  // Авторизация
+  const [user, setUser] = useState<UserInfo | null>(null);
   const [view, setView] = useState<AppView>("main");
   const [isLive, setIsLive] = useState(false);
+
   const [config, setConfig] = useState<StreamConfig>({
     serverUrl: "",
     token: "",
@@ -50,42 +60,113 @@ export default function App() {
     { id: "mic-1", type: "microphone", label: "Микрофон", enabled: false },
   ]);
 
-  const [scenes, setScenes] = useState<Scene[]>([
-    { id: "scene-1", name: "Камера + Экран", sources: ["cam-1", "mic-1"] },
-    { id: "scene-2", name: "Только экран", sources: ["mic-1"] },
-  ]);
-
-  const [activeSceneId, setActiveSceneId] = useState("scene-1");
-
-  // Стрим (камера/экран)
+  // Стримы
   const [cameraStream, setCameraStream] = useState<MediaStream | null>(null);
   const [screenStream, setScreenStream] = useState<MediaStream | null>(null);
 
-  const handleConnect = useCallback((cfg: StreamConfig) => {
-    setConfig(cfg);
-    setView("main");
+  // Кроппинг
+  const [cameraCrop, setCameraCrop] = useState<CropSettings>({ top: 0, bottom: 0, left: 0, right: 0 });
+  const [screenCrop, setScreenCrop] = useState<CropSettings>({ top: 0, bottom: 0, left: 0, right: 0 });
+
+  // Форма PiP
+  const [pipShape, setPipShape] = useState<"rect" | "round">("rect");
+
+  // Авторизация
+  const handleAuth = useCallback((result: AuthResult) => {
+    setUser(result.user);
+    setConfig((prev) => ({
+      ...prev,
+      serverUrl: result.serverUrl,
+      token: result.token,
+    }));
   }, []);
 
+  // Переключение источника (камера/микрофон)
   const handleToggleSource = useCallback((sourceId: string) => {
-    setSources((prev) =>
-      prev.map((s) => (s.id === sourceId ? { ...s, enabled: !s.enabled } : s)),
-    );
+    setSources((prev) => {
+      const source = prev.find((s) => s.id === sourceId);
+      if (!source) return prev;
+
+      const newEnabled = !source.enabled;
+
+      // Если включаем камеру — запустить поток
+      if (source.type === "camera" && newEnabled && !cameraStream && hasMediaDevices()) {
+        navigator.mediaDevices
+          .getUserMedia({
+            video: source.deviceId ? { deviceId: { exact: source.deviceId } } : true,
+            audio: false,
+          })
+          .then((stream) => setCameraStream(stream))
+          .catch((err) => console.error("Ошибка захвата камеры:", err));
+      }
+
+      // Если выключаем камеру — остановить поток
+      if (source.type === "camera" && !newEnabled && cameraStream) {
+        cameraStream.getTracks().forEach((t) => t.stop());
+        setCameraStream(null);
+      }
+
+      return prev.map((s) => (s.id === sourceId ? { ...s, enabled: newEnabled } : s));
+    });
+  }, [cameraStream]);
+
+  // Обновление источника (выбор устройства)
+  const handleUpdateSource = useCallback((sourceId: string, updates: Partial<MediaSource>) => {
+    setSources((prev) => prev.map((s) => (s.id === sourceId ? { ...s, ...updates } : s)));
+
+    // Если меняется устройство камеры — перезапустить поток
+    const source = sources.find((s) => s.id === sourceId);
+    if (source?.type === "camera" && source.enabled && updates.deviceId && hasMediaDevices()) {
+      if (cameraStream) {
+        cameraStream.getTracks().forEach((t) => t.stop());
+      }
+      navigator.mediaDevices
+        .getUserMedia({
+          video: { deviceId: { exact: updates.deviceId } },
+          audio: false,
+        })
+        .then((stream) => setCameraStream(stream))
+        .catch((err) => console.error("Ошибка переключения камеры:", err));
+    }
+  }, [sources, cameraStream]);
+
+  // Захват экрана
+  const handleStartScreenCapture = useCallback(() => {
+    if (!hasMediaDevices()) return;
+
+    navigator.mediaDevices
+      .getDisplayMedia({
+        video: true,
+        audio: true,
+      })
+      .then((stream) => {
+        setScreenStream(stream);
+        // Обработка остановки захвата пользователем
+        stream.getVideoTracks()[0].onended = () => setScreenStream(null);
+      })
+      .catch((err) => console.error("Ошибка захвата экрана:", err));
   }, []);
 
-  const handleAddSource = useCallback((source: MediaSource) => {
-    setSources((prev) => [...prev, source]);
-  }, []);
+  const handleStopScreenCapture = useCallback(() => {
+    if (screenStream) {
+      screenStream.getTracks().forEach((t) => t.stop());
+      setScreenStream(null);
+    }
+  }, [screenStream]);
+
+  // Если не авторизован — показать экран входа
+  if (!user) {
+    return <AuthScreen onAuth={handleAuth} />;
+  }
 
   return (
     <div className="app">
-      {view === "connect" && (
-        <ConnectionModal
-          config={config}
-          onConnect={handleConnect}
-          onClose={() => setView("main")}
-        />
-      )}
+      {/* Фоновые орбы */}
+      <div className="orb o1" />
+      <div className="orb o2" />
+      <div className="orb o3" />
 
+      {/* Модалки */}
       {view === "settings" && (
         <SettingsPanel
           config={config}
@@ -94,14 +175,34 @@ export default function App() {
         />
       )}
 
+      {/* Основной layout */}
+      <Controls
+        isLive={isLive}
+        setIsLive={setIsLive}
+        config={config}
+        sources={sources}
+        cameraStream={cameraStream}
+        screenStream={screenStream}
+        onToggleSource={handleToggleSource}
+        onOpenSettings={() => setView("settings")}
+        userName={user.name}
+      />
+
       <div className="app-layout">
         <Sidebar
           sources={sources}
-          scenes={scenes}
-          activeSceneId={activeSceneId}
-          onSelectScene={setActiveSceneId}
+          cameraStream={cameraStream}
+          screenStream={screenStream}
           onToggleSource={handleToggleSource}
-          onAddSource={handleAddSource}
+          onUpdateSource={handleUpdateSource}
+          onStartScreenCapture={handleStartScreenCapture}
+          onStopScreenCapture={handleStopScreenCapture}
+          cameraCrop={cameraCrop}
+          screenCrop={screenCrop}
+          onCameraCropChange={setCameraCrop}
+          onScreenCropChange={setScreenCrop}
+          pipShape={pipShape}
+          onPipShapeChange={setPipShape}
         />
 
         <div className="app-center">
@@ -109,20 +210,10 @@ export default function App() {
             sources={sources}
             cameraStream={cameraStream}
             screenStream={screenStream}
-            setCameraStream={setCameraStream}
-            setScreenStream={setScreenStream}
             isLive={isLive}
-          />
-
-          <Controls
-            isLive={isLive}
-            setIsLive={setIsLive}
-            config={config}
-            sources={sources}
-            cameraStream={cameraStream}
-            screenStream={screenStream}
-            onOpenConnect={() => setView("connect")}
-            onOpenSettings={() => setView("settings")}
+            cameraCrop={cameraCrop}
+            screenCrop={screenCrop}
+            pipShape={pipShape}
           />
         </div>
       </div>

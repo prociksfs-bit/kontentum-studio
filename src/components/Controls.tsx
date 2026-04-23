@@ -8,10 +8,14 @@ interface Props {
   sources: MediaSource[];
   cameraStream: MediaStream | null;
   screenStream: MediaStream | null;
-  onOpenConnect: () => void;
+  onToggleSource: (id: string) => void;
   onOpenSettings: () => void;
+  userName?: string;
 }
 
+/**
+ * Панель управления эфиром в стиле вебинарной платформы.
+ */
 export default function Controls({
   isLive,
   setIsLive,
@@ -19,8 +23,9 @@ export default function Controls({
   sources,
   cameraStream,
   screenStream,
-  onOpenConnect,
+  onToggleSource,
   onOpenSettings,
+  userName,
 }: Props) {
   const [elapsed, setElapsed] = useState(0);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -42,9 +47,7 @@ export default function Controls({
       }
       setElapsed(0);
     } else {
-      // Проверяем подключение
       if (!config.serverUrl || !config.token) {
-        onOpenConnect();
         return;
       }
 
@@ -55,38 +58,108 @@ export default function Controls({
         setElapsed((prev) => prev + 1);
       }, 1000);
     }
-  }, [isLive, config, setIsLive, onOpenConnect]);
+  }, [isLive, config, setIsLive]);
 
   const micSource = sources.find((s) => s.type === "microphone");
   const camSource = sources.find((s) => s.type === "camera");
 
   return (
-    <div className="controls">
-      <div className="controls-left">
-        {/* Таймер */}
-        <div className={`timer ${isLive ? "live" : ""}`}>
-          {formatTime(elapsed)}
+    <>
+      {/* Шапка */}
+      <div className="app-header">
+        <span className="hdr-logo">КОНТЕНТУМ STUDIO</span>
+
+        <div className="hdr-right">
+          {/* Таймер */}
+          <div className={`timer-display ${isLive ? "live" : ""}`}>
+            {formatTime(elapsed)}
+          </div>
+
+          {/* Статус подключения */}
+          {isLive && (
+            <div className="live-pill">
+              <span className="live-dot" />
+              LIVE
+            </div>
+          )}
+
+          <div className="conn-status">
+            <span className={`csd ${config.serverUrl ? (isLive ? "green" : "amber") : "red"}`} />
+            {config.serverUrl ? (isLive ? "В эфире" : "Готов") : "Нет подключения"}
+          </div>
+
+          {/* Имя пользователя */}
+          {userName && (
+            <div className="hdr-user">
+              <span className="u-avatar">{userName.charAt(0).toUpperCase()}</span>
+              <span>{userName}</span>
+            </div>
+          )}
         </div>
       </div>
 
-      <div className="controls-center">
-        {/* Кнопка START/STOP */}
+      {/* Нижняя панель */}
+      <div className="ctrl-bar">
+        {/* Камера */}
         <button
-          className={`btn-stream ${isLive ? "stop" : "start"}`}
-          onClick={handleStartStop}
+          className={`cb ${camSource?.enabled ? "on" : "off"}`}
+          onClick={() => camSource && onToggleSource(camSource.id)}
         >
-          {isLive ? "⏹ Завершить эфир" : "▶ Начать эфир"}
+          <span className="ci">📷</span>
+          {camSource?.enabled ? "Камера" : "Камера"}
         </button>
-      </div>
 
-      <div className="controls-right">
-        <button className="btn-control" onClick={onOpenConnect} title="Подключение">
-          🔗
+        {/* Микрофон */}
+        <button
+          className={`cb ${micSource?.enabled ? "on" : "off"}`}
+          onClick={() => micSource && onToggleSource(micSource.id)}
+        >
+          <span className="ci">{micSource?.enabled ? "🎤" : "🔇"}</span>
+          {micSource?.enabled ? "Микрофон" : "Без звука"}
         </button>
-        <button className="btn-control" onClick={onOpenSettings} title="Настройки">
-          ⚙️
+
+        <div className="cb-sep" />
+
+        {/* Кнопка START/STOP */}
+        {isLive ? (
+          <button className="cb rec-on" onClick={handleStartStop}>
+            <span className="ci">⏺</span>
+            СТОП
+          </button>
+        ) : (
+          <button
+            className="cb on"
+            onClick={handleStartStop}
+            style={
+              config.serverUrl && config.token
+                ? { background: "rgba(0, 255, 157, 0.12)", borderColor: "rgba(0, 255, 157, 0.4)", color: "var(--green)" }
+                : { opacity: 0.4, cursor: "not-allowed" }
+            }
+          >
+            <span className="ci">▶</span>
+            ЭФИР
+          </button>
+        )}
+
+        <div className="cb-sep" />
+
+        {/* Настройки */}
+        <button className="cb" onClick={onOpenSettings}>
+          <span className="ci">⚙️</span>
+          Настройки
         </button>
+
+        {/* Завершить */}
+        {isLive && (
+          <>
+            <div className="cb-sep" />
+            <button className="cb end" onClick={handleStartStop}>
+              <span className="ci">⏹</span>
+              Завершить
+            </button>
+          </>
+        )}
       </div>
-    </div>
+    </>
   );
 }
