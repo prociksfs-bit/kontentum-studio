@@ -59,6 +59,8 @@ export default function App() {
 
   // Авторизация
   const [user, setUser] = useState<UserInfo | null>(null);
+  const [hostToken, setHostToken] = useState<string>("");
+  const [roomId, setRoomId] = useState<string>("");
   const [view, setView] = useState<AppView>("main");
   const [isLive, setIsLive] = useState(false);
 
@@ -127,13 +129,15 @@ export default function App() {
   // Авторизация
   const handleAuth = useCallback((result: AuthResult) => {
     setUser(result.user);
+    setHostToken(result.hostToken || "");
+    setRoomId(result.roomId || "");
     setConfig((prev) => ({
       ...prev,
       serverUrl: result.serverUrl,
       token: result.token,
       roomName: result.roomId || prev.roomName,
     }));
-    console.log(`Авторизация: ${result.user.name} | Сервер: ${result.serverUrl ? "подключён" : "не указан"} | Комната: ${result.roomId || "не создана"}`);
+    console.log(`Авторизация: ${result.user.name} | Комната: ${result.roomId || "не создана"}`);
   }, []);
 
   // Переключение источника (камера/микрофон)
@@ -224,36 +228,32 @@ export default function App() {
   const isMacOS = /mac/i.test(navigator.platform) || /mac/i.test(navigator.userAgent);
 
   // Захват экрана с обработкой ограничений WKWebView на macOS
-  const handleStartScreenCapture = useCallback(async () => {
-    // Проверяем наличие getDisplayMedia API
+  const handleStartScreenCapture = useCallback(async (surface?: "monitor" | "window") => {
     const hasDisplayMedia = !!(
       navigator?.mediaDevices && typeof navigator.mediaDevices.getDisplayMedia === "function"
     );
 
     if (!hasDisplayMedia) {
-      // На macOS WKWebView может не поддерживать getDisplayMedia
       if (isMacOS) {
         const msg =
-          "Захват экрана недоступен в WKWebView на macOS. " +
-          "Убедитесь, что приложению дано разрешение «Запись экрана» " +
-          "в Системных настройках → Конфиденциальность и безопасность → Запись экрана. " +
-          "После выдачи разрешения перезапустите приложение.";
+          "Захват экрана недоступен. Дайте разрешение «Запись экрана» в " +
+          "Системных настройках → Конфиденциальность → Запись экрана, затем перезапустите приложение.";
         console.error(msg);
         setMediaError(msg);
       } else {
-        const msg = "getDisplayMedia API недоступен. Захват экрана невозможен.";
-        console.error(msg);
-        setMediaError(msg);
+        console.error("getDisplayMedia API недоступен");
+        setMediaError("Захват экрана недоступен в этом окружении.");
       }
       return;
     }
 
     try {
-      console.log("Запуск захвата экрана...");
-      const stream = await navigator.mediaDevices.getDisplayMedia({
-        video: true,
+      const constraints: DisplayMediaStreamOptions = {
+        video: surface ? ({ displaySurface: surface } as MediaTrackConstraints) : true,
         audio: true,
-      });
+      };
+      console.log("Захват экрана:", surface || "системный выбор");
+      const stream = await navigator.mediaDevices.getDisplayMedia(constraints);
       setScreenStream(stream);
       const track = stream.getVideoTracks()[0];
       console.log("Захват экрана начат:", track?.label || "экран");
@@ -393,6 +393,8 @@ export default function App() {
         checkingUpdates={checking}
         showLogs={showLogs}
         showChat={showChat}
+        hostToken={hostToken}
+        roomId={roomId}
       />
     </div>
   );

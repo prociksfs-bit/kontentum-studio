@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from "react";
+import { fetch as tauriFetch } from "@tauri-apps/plugin-http";
 
 export interface UserInfo {
   id: number;
@@ -64,7 +65,7 @@ export default function AuthScreen({ onAuth }: Props) {
 
     try {
       // Шаг 1: инициализируем сессию авторизации на сервере
-      const initResp = await fetch(`${PLATFORM_URL}/vebinar/api/max-auth-init`, {
+      const initResp = await tauriFetch(`${PLATFORM_URL}/vebinar/api/max-auth-init`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
       });
@@ -87,7 +88,7 @@ export default function AuthScreen({ onAuth }: Props) {
 
       pollTimer.current = setInterval(async () => {
         try {
-          const pollResp = await fetch(
+          const pollResp = await tauriFetch(
             `${PLATFORM_URL}/vebinar/api/max-auth-poll?code=${authCode.current}`
           );
 
@@ -112,7 +113,7 @@ export default function AuthScreen({ onAuth }: Props) {
           const { hostToken, displayName: userName, user } = data;
 
           // Шаг 4: создаём комнату вебинара
-          const roomResp = await fetch(`${PLATFORM_URL}/vebinar/api/create-room`, {
+          const roomResp = await tauriFetch(`${PLATFORM_URL}/vebinar/api/create-room`, {
             method: "POST",
             headers: {
               "Content-Type": "application/json",
@@ -128,7 +129,7 @@ export default function AuthScreen({ onAuth }: Props) {
           const { roomId } = await roomResp.json();
 
           // Шаг 5: получаем LiveKit токен ведущего
-          const tokenResp = await fetch(`${PLATFORM_URL}/vebinar/api/token`, {
+          const tokenResp = await tauriFetch(`${PLATFORM_URL}/vebinar/api/token`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ room: roomId, name: userName, role: "presenter" }),

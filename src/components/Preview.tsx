@@ -20,6 +20,7 @@ interface Props {
 
 /**
  * Область предпросмотра видео с поддержкой кроппинга и PiP.
+ * Кроппинг через clip-path: inset() — обрезает края без масштабирования.
  */
 export default function Preview({
   sources,
@@ -33,7 +34,6 @@ export default function Preview({
   const cameraRef = useRef<HTMLVideoElement>(null);
   const screenRef = useRef<HTMLVideoElement>(null);
 
-  // Привязка потоков к video элементам
   useEffect(() => {
     if (cameraRef.current && cameraStream) {
       cameraRef.current.srcObject = cameraStream;
@@ -49,47 +49,17 @@ export default function Preview({
   const hasScreen = !!screenStream;
   const hasCamera = !!cameraStream;
 
-  // Стиль кроппинга для камеры
-  const getCropStyle = (crop: CropSettings, mode: "full" | "pip"): React.CSSProperties => {
+  // Кроппинг через clip-path: inset(top right bottom left) — без зума
+  const getCropStyle = (crop: CropSettings): React.CSSProperties => {
     const hasCrop = crop.top > 0 || crop.bottom > 0 || crop.left > 0 || crop.right > 0;
     if (!hasCrop) return {};
-
-    // Используем object-position + scale для эмуляции кроппинга
-    const scaleX = 100 / (100 - crop.left - crop.right);
-    const scaleY = 100 / (100 - crop.top - crop.bottom);
-    const scale = Math.max(scaleX, scaleY);
-
-    const translateX = ((crop.left - crop.right) / 2) * scale;
-    const translateY = ((crop.top - crop.bottom) / 2) * scale;
-
     return {
-      transform: `scale(${scale}) translate(${-translateX}%, ${-translateY}%)`,
-      transformOrigin: "center center",
-    };
-  };
-
-  // Стиль кроппинга для экрана
-  const getScreenCropStyle = (): React.CSSProperties => {
-    const crop = screenCrop;
-    const hasCrop = crop.top > 0 || crop.bottom > 0 || crop.left > 0 || crop.right > 0;
-    if (!hasCrop) return {};
-
-    const scaleX = 100 / (100 - crop.left - crop.right);
-    const scaleY = 100 / (100 - crop.top - crop.bottom);
-    const scale = Math.max(scaleX, scaleY);
-
-    const translateX = ((crop.left - crop.right) / 2) * scale;
-    const translateY = ((crop.top - crop.bottom) / 2) * scale;
-
-    return {
-      transform: `scale(${scale}) translate(${-translateX}%, ${-translateY}%)`,
-      transformOrigin: "center center",
+      clipPath: `inset(${crop.top}% ${crop.right}% ${crop.bottom}% ${crop.left}%)`,
     };
   };
 
   return (
     <div className="preview">
-      {/* Индикатор LIVE */}
       {isLive && (
         <div className="live-pill" style={{ position: "absolute", top: 12, left: 12, zIndex: 10 }}>
           <span className="live-dot" />
@@ -97,7 +67,6 @@ export default function Preview({
         </div>
       )}
 
-      {/* Основная область */}
       <div className="preview-canvas">
         {hasScreen && (
           <div style={{ width: "100%", height: "100%", overflow: "hidden", position: "relative" }}>
@@ -107,7 +76,7 @@ export default function Preview({
               autoPlay
               playsInline
               muted
-              style={getScreenCropStyle()}
+              style={{ width: "100%", height: "100%", objectFit: "contain", ...getCropStyle(screenCrop) }}
             />
           </div>
         )}
@@ -126,7 +95,6 @@ export default function Preview({
               border: "2px solid rgba(0, 245, 255, 0.3)",
               boxShadow: "0 0 20px rgba(0, 245, 255, 0.15)",
               zIndex: 5,
-              cursor: "grab",
             } : { width: "100%", height: "100%", overflow: "hidden" }}
           >
             <video
@@ -136,10 +104,10 @@ export default function Preview({
               playsInline
               muted
               style={{
-                ...getCropStyle(cameraCrop, hasScreen ? "pip" : "full"),
                 width: "100%",
                 height: "100%",
                 objectFit: "cover",
+                ...getCropStyle(cameraCrop),
                 ...(hasScreen ? {
                   position: "static",
                   border: "none",

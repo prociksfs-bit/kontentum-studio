@@ -8,6 +8,7 @@
     "shell:allow-open",
     "dialog:default",
     "fs:default",
-    "http:default"
+    "http:default",
+    "clipboard-manager:allow-write-text"
   ]
 }

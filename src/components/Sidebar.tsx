@@ -15,7 +15,7 @@ interface Props {
   screenStream: MediaStream | null;
   onToggleSource: (id: string) => void;
   onUpdateSource: (id: string, updates: Partial<MediaSource>) => void;
-  onStartScreenCapture: () => void;
+  onStartScreenCapture: (surface?: "monitor" | "window") => void;
   onStopScreenCapture: () => void;
   cameraCrop: CropSettings;
   screenCrop: CropSettings;
@@ -45,16 +45,23 @@ export default function Sidebar({
 }: Props) {
   const { cameras, microphones, refreshDevices } = useMediaDevices();
   const [devicesLoaded, setDevicesLoaded] = useState(false);
+  const [showScreenMenu, setShowScreenMenu] = useState(false);
 
   const cameraSource = sources.find((s) => s.type === "camera");
   const micSource = sources.find((s) => s.type === "microphone");
 
-  // Загрузить устройства при монтировании
   useEffect(() => {
     refreshDevices().then(() => setDevicesLoaded(true));
   }, [refreshDevices]);
 
-  // Обработчик выбора камеры
+  // Закрываем меню при клике вне него
+  useEffect(() => {
+    if (!showScreenMenu) return;
+    const handler = () => setShowScreenMenu(false);
+    document.addEventListener("click", handler, { once: true });
+    return () => document.removeEventListener("click", handler);
+  }, [showScreenMenu]);
+
   const handleCameraSelect = useCallback(
     (deviceId: string) => {
       if (cameraSource) {
@@ -64,7 +71,6 @@ export default function Sidebar({
     [cameraSource, cameras, onUpdateSource],
   );
 
-  // Обработчик выбора микрофона
   const handleMicSelect = useCallback(
     (deviceId: string) => {
       if (micSource) {
@@ -81,9 +87,7 @@ export default function Sidebar({
         <h3>Камера</h3>
         <div className="device-group">
           <div className="device-group-header">
-            <span className="device-group-title">
-              📷 Видео
-            </span>
+            <span className="device-group-title">📷 Видео</span>
             <button
               className={`device-toggle ${cameraSource?.enabled ? "on" : "off"}`}
               onClick={() => cameraSource && onToggleSource(cameraSource.id)}
@@ -106,25 +110,21 @@ export default function Sidebar({
             </select>
           ) : (
             <div style={{ fontSize: 11, color: "var(--muted)", padding: "6px 0" }}>
-              {devicesLoaded ? "Камеры не найдены" : "Загрузка устройств..."}
+              {devicesLoaded ? "Камеры не найдены" : "Загрузка..."}
             </div>
           )}
 
-          {/* Форма камеры PiP */}
+          {/* Форма PiP */}
           {cameraSource?.enabled && screenStream && (
             <div className="pip-shape-row">
               <button
                 className={`pip-shape-btn ${pipShape === "rect" ? "active" : ""}`}
                 onClick={() => onPipShapeChange("rect")}
-              >
-                Прямоугольная
-              </button>
+              >Прямоугольная</button>
               <button
                 className={`pip-shape-btn ${pipShape === "round" ? "active" : ""}`}
                 onClick={() => onPipShapeChange("round")}
-              >
-                Круглая
-              </button>
+              >Круглая</button>
             </div>
           )}
 
@@ -158,9 +158,7 @@ export default function Sidebar({
         <h3>Микрофон</h3>
         <div className="device-group">
           <div className="device-group-header">
-            <span className="device-group-title">
-              🎤 Аудио
-            </span>
+            <span className="device-group-title">🎤 Аудио</span>
             <button
               className={`device-toggle ${micSource?.enabled ? "on" : "off"}`}
               onClick={() => micSource && onToggleSource(micSource.id)}
@@ -183,7 +181,7 @@ export default function Sidebar({
             </select>
           ) : (
             <div style={{ fontSize: 11, color: "var(--muted)", padding: "6px 0" }}>
-              {devicesLoaded ? "Микрофоны не найдены" : "Загрузка устройств..."}
+              {devicesLoaded ? "Микрофоны не найдены" : "Загрузка..."}
             </div>
           )}
         </div>
@@ -194,18 +192,45 @@ export default function Sidebar({
         <h3>Захват экрана</h3>
         <div className="screen-capture-section">
           {!screenStream ? (
-            <>
-              <button
-                className="screen-mode-btn"
-                onClick={onStartScreenCapture}
-                style={{ width: "100%", marginBottom: 0 }}
-              >
-                🖥 Выбрать экран или окно
-              </button>
-              <div style={{ fontSize: 10, color: "var(--muted)", marginTop: 6 }}>
-                Система предложит выбрать весь экран или конкретное окно
+            <div style={{ position: "relative" }}>
+              <div style={{ display: "flex", gap: 4 }}>
+                {/* Основная кнопка — весь экран */}
+                <button
+                  className="screen-mode-btn"
+                  style={{ flex: 1 }}
+                  onClick={() => onStartScreenCapture("monitor")}
+                >
+                  🖥 Весь экран
+                </button>
+                {/* Кнопка открытия меню */}
+                <button
+                  className="screen-mode-btn"
+                  style={{ padding: "0 12px", fontSize: 16 }}
+                  onClick={(e) => { e.stopPropagation(); setShowScreenMenu((v) => !v); }}
+                  title="Выбрать источник"
+                >
+                  ▾
+                </button>
               </div>
-            </>
+
+              {/* Выпадающее меню */}
+              {showScreenMenu && (
+                <div className="screen-menu">
+                  <button
+                    className="screen-menu-item"
+                    onClick={() => { onStartScreenCapture("monitor"); setShowScreenMenu(false); }}
+                  >
+                    🖥 Весь экран
+                  </button>
+                  <button
+                    className="screen-menu-item"
+                    onClick={() => { onStartScreenCapture("window"); setShowScreenMenu(false); }}
+                  >
+                    🪟 Окно приложения
+                  </button>
+                </div>
+              )}
+            </div>
           ) : (
             <>
               <div className="screen-status">
