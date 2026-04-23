@@ -10,6 +10,11 @@ interface Props {
   isLive: boolean;
 }
 
+/** Проверка доступности MediaDevices API */
+function hasMediaDevices(): boolean {
+  return !!(navigator && navigator.mediaDevices && navigator.mediaDevices.getUserMedia);
+}
+
 export default function Preview({
   sources,
   cameraStream,
@@ -27,15 +32,23 @@ export default function Preview({
 
   useEffect(() => {
     if (cameraSource && !cameraStream) {
-      navigator.mediaDevices
-        .getUserMedia({
-          video: { deviceId: cameraSource.deviceId ? { exact: cameraSource.deviceId } : undefined },
-          audio: false,
-        })
-        .then((stream) => {
-          setCameraStream(stream);
-        })
-        .catch((err) => console.error("Ошибка захвата камеры:", err));
+      if (!hasMediaDevices()) {
+        console.warn("MediaDevices API недоступен — камера не может быть захвачена");
+        return;
+      }
+      try {
+        navigator.mediaDevices
+          .getUserMedia({
+            video: { deviceId: cameraSource.deviceId ? { exact: cameraSource.deviceId } : undefined },
+            audio: false,
+          })
+          .then((stream) => {
+            setCameraStream(stream);
+          })
+          .catch((err) => console.error("Ошибка захвата камеры:", err));
+      } catch (err) {
+        console.error("Критическая ошибка при запросе камеры:", err);
+      }
     }
 
     if (!cameraSource && cameraStream) {
@@ -46,14 +59,22 @@ export default function Preview({
 
   useEffect(() => {
     if (screenSource && !screenStream) {
-      navigator.mediaDevices
-        .getDisplayMedia({ video: true, audio: true })
-        .then((stream) => {
-          setScreenStream(stream);
-          // Обработка остановки захвата пользователем
-          stream.getVideoTracks()[0].onended = () => setScreenStream(null);
-        })
-        .catch((err) => console.error("Ошибка захвата экрана:", err));
+      if (!hasMediaDevices()) {
+        console.warn("MediaDevices API недоступен — захват экрана невозможен");
+        return;
+      }
+      try {
+        navigator.mediaDevices
+          .getDisplayMedia({ video: true, audio: true })
+          .then((stream) => {
+            setScreenStream(stream);
+            // Обработка остановки захвата пользователем
+            stream.getVideoTracks()[0].onended = () => setScreenStream(null);
+          })
+          .catch((err) => console.error("Ошибка захвата экрана:", err));
+      } catch (err) {
+        console.error("Критическая ошибка при запросе экрана:", err);
+      }
     }
 
     if (!screenSource && screenStream) {

@@ -46,8 +46,8 @@ export default function App() {
   });
 
   const [sources, setSources] = useState<MediaSource[]>([
-    { id: "cam-1", type: "camera", label: "Веб-камера", enabled: true },
-    { id: "mic-1", type: "microphone", label: "Микрофон", enabled: true },
+    { id: "cam-1", type: "camera", label: "Веб-камера", enabled: false },
+    { id: "mic-1", type: "microphone", label: "Микрофон", enabled: false },
   ]);
 
   const [scenes, setScenes] = useState<Scene[]>([
