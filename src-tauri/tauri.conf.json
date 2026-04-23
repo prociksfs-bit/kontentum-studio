@@ -39,11 +39,11 @@
     "windows": {
       "certificateThumbprint": null,
       "digestAlgorithm": "sha256",
-      "timestampUrl": ""
-    },
-    "nsis": {
-      "languages": ["Russian", "English"],
-      "displayLanguageSelector": false
+      "timestampUrl": "",
+      "nsis": {
+        "languages": ["Russian", "English"],
+        "displayLanguageSelector": false
+      }
     },
     "macOS": {
       "minimumSystemVersion": "10.15"
