@@ -518,6 +518,8 @@ export default function App() {
             isLive={isLive}
             cameraCrop={cameraCrop}
             screenCrop={screenCrop}
+            onCameraCropChange={setCameraCrop}
+            onScreenCropChange={setScreenCrop}
             pipShape={pipShape}
           />
 
