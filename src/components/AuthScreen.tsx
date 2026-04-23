@@ -16,7 +16,17 @@ export interface AuthResult {
 
 interface Props {
   onAuth: (result: AuthResult) => void;
+  onLogout?: () => void;
 }
+
+interface SavedSession {
+  hostToken: string;
+  user: { id: number; name: string; username?: string };
+  savedAt: number;
+}
+
+const SESSION_KEY = "kontentum-session";
+const SESSION_TTL_MS = 7 * 24 * 60 * 60 * 1000; // 7 дней
 
 // URL платформы КОНТЕНТУМ (punycode — WKWebView не резолвит кириллические домены напрямую)
 const PLATFORM_URL = "https://xn--e1ajhcbd3acj.xn--p1ai";
@@ -69,8 +79,8 @@ async function safeFetch(url: string, options?: RequestInit): Promise<Response> 
  * 3. Поллинг GET /vebinar/api/max-auth-poll?code={code} каждые 2 сек
  * 4. Когда { ready: true, hostToken, displayName } → создаём комнату + получаем LiveKit токен
  */
-export default function AuthScreen({ onAuth }: Props) {
-  const [mode, setMode] = useState<"choice" | "polling" | "manual">("choice");
+export default function AuthScreen({ onAuth, onLogout }: Props) {
+  const [mode, setMode] = useState<"choice" | "polling" | "manual" | "restoring">("choice");
   const [serverUrl, setServerUrl] = useState("");
   const [token, setToken] = useState("");
   const [displayName, setDisplayName] = useState("");
@@ -79,6 +89,72 @@ export default function AuthScreen({ onAuth }: Props) {
   const [pollStatus, setPollStatus] = useState("Ожидаем подтверждение в MAX...");
   const pollTimer = useRef<ReturnType<typeof setInterval> | null>(null);
   const authCode = useRef<string | null>(null);
+
+  // Восстановление сессии из localStorage при монтировании
+  useEffect(() => {
+    const tryRestoreSession = async () => {
+      try {
+        const raw = localStorage.getItem(SESSION_KEY);
+        if (!raw) return;
+
+        const session: SavedSession = JSON.parse(raw);
+        const age = Date.now() - session.savedAt;
+        if (age > SESSION_TTL_MS) {
+          localStorage.removeItem(SESSION_KEY);
+          return;
+        }
+
+        // Сессия найдена и не устарела — пробуем восстановить
+        setMode("restoring");
+
+        const { hostToken, user } = session;
+        const userName = user.name;
+
+        // Создаём комнату
+        const roomResp = await safeFetch(`${PLATFORM_URL}/vebinar/api/create-room`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "X-Host-Token": hostToken,
+          },
+          body: JSON.stringify({ name: "Вебинар" }),
+        });
+
+        if (!roomResp.ok) throw new Error(`Ошибка создания комнаты: ${roomResp.status}`);
+        const roomData = await roomResp.json();
+        const roomId = roomData.roomId;
+
+        // Получаем LiveKit токен
+        const tokenResp = await safeFetch(`${PLATFORM_URL}/vebinar/api/token`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ room: roomId, name: userName, role: "presenter" }),
+        });
+
+        if (!tokenResp.ok) throw new Error(`Ошибка получения токена: ${tokenResp.status}`);
+        const tokenData = await tokenResp.json();
+        const { token: lkToken, wsUrl } = tokenData;
+
+        onAuth({
+          user: {
+            id: user.id,
+            name: userName,
+            username: user.username,
+          },
+          serverUrl: wsUrl,
+          token: lkToken,
+          hostToken,
+          roomId,
+        });
+      } catch (e) {
+        console.warn("Не удалось восстановить сессию:", e);
+        try { localStorage.removeItem(SESSION_KEY); } catch {}
+        setMode("choice");
+      }
+    };
+
+    tryRestoreSession();
+  }, []);
 
   // Очищаем поллинг при размонтировании
   useEffect(() => {
@@ -224,6 +300,15 @@ export default function AuthScreen({ onAuth }: Props) {
           const { token: lkToken, wsUrl } = tokenData;
           console.log("LiveKit токен получен, wsUrl:", wsUrl);
 
+          // Сохраняем сессию в localStorage
+          try {
+            localStorage.setItem(SESSION_KEY, JSON.stringify({
+              hostToken,
+              user: { id: user?.id ?? Date.now(), name: userName, username: user?.username },
+              savedAt: Date.now(),
+            }));
+          } catch {}
+
           // Готово — передаём результат в App
           onAuth({
             user: {
@@ -301,6 +386,19 @@ export default function AuthScreen({ onAuth }: Props) {
           <div className="auth-logo-sub">STUDIO</div>
         </div>
 
+        {mode === "restoring" && (
+          <>
+            <div className="auth-title">Восстановление сессии...</div>
+            <div className="auth-subtitle">
+              Подключаемся к вашей предыдущей комнате
+            </div>
+            <div className="auth-polling">
+              <div className="polling-dot" />
+              <span>Восстановление сессии...</span>
+            </div>
+          </>
+        )}
+
         {mode === "choice" && (
           <>
             <div className="auth-title">Добро пожаловать</div>
@@ -333,6 +431,26 @@ export default function AuthScreen({ onAuth }: Props) {
             >
               Ввести данные вручную
             </button>
+
+            {/* Кнопка выхода (если есть обработчик) */}
+            {onLogout && (
+              <button
+                className="auth-btn-max"
+                onClick={() => {
+                  try { localStorage.removeItem(SESSION_KEY); } catch {}
+                  onLogout();
+                }}
+                style={{
+                  background: "transparent",
+                  boxShadow: "none",
+                  border: "1px solid rgba(255, 30, 50, 0.2)",
+                  color: "rgba(255, 80, 100, 0.8)",
+                  fontSize: 13,
+                }}
+              >
+                Выйти
+              </button>
+            )}
           </>
         )}
 
@@ -361,6 +479,26 @@ export default function AuthScreen({ onAuth }: Props) {
             >
               Отмена
             </button>
+
+            {onLogout && (
+              <button
+                className="auth-btn-max"
+                onClick={() => {
+                  stopPolling();
+                  try { localStorage.removeItem(SESSION_KEY); } catch {}
+                  onLogout();
+                }}
+                style={{
+                  background: "transparent",
+                  boxShadow: "none",
+                  border: "1px solid rgba(255, 30, 50, 0.2)",
+                  color: "rgba(255, 80, 100, 0.8)",
+                  fontSize: 13,
+                }}
+              >
+                Выйти
+              </button>
+            )}
           </>
         )}
 

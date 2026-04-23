@@ -9,6 +9,7 @@ import SettingsPanel from "./components/SettingsPanel";
 import LogPanel from "./components/LogPanel";
 import UpdateBanner from "./components/UpdateBanner";
 import ChatPanel from "./components/ChatPanel";
+import WelcomeCard from "./components/WelcomeCard";
 import { useAppLogger } from "./lib/useAppLogger";
 import { useUpdateChecker } from "./lib/useUpdateChecker";
 import { useLiveKit } from "./lib/useLiveKit";
@@ -124,6 +125,9 @@ export default function App() {
   const [view, setView] = useState<AppView>("main");
   const [isLive, setIsLive] = useState(false);
 
+  // Состояние приложения: welcome-экран или live-режим
+  const [appState, setAppState] = useState<"welcome" | "live">("welcome");
+
   // Ошибка медиа
   const [mediaError, setMediaError] = useState<string | null>(null);
 
@@ -195,6 +199,16 @@ export default function App() {
       console.warn("Приложение НЕ в secure context — MediaDevices API будет недоступен! Нужен useHttpsScheme: true в tauri.conf.json");
     }
   });
+
+  // Выход из системы
+  const handleLogout = useCallback(() => {
+    try { localStorage.removeItem("kontentum-session"); } catch {}
+    setUser(null);
+    setHostToken("");
+    setRoomId("");
+    setConfig((prev) => ({ ...prev, serverUrl: "", token: "", roomName: "" }));
+    setAppState("welcome");
+  }, []);
 
   // Авторизация
   const handleAuth = useCallback((result: AuthResult) => {
@@ -417,18 +431,56 @@ export default function App() {
 
       await liveKit.connect(config.serverUrl, config.token, combinedStream, screenStream, config);
       setIsLive(true);
+      setAppState("live");
       console.log("Эфир начат ✅");
     } else {
       console.log("Остановка эфира...");
       await liveKit.disconnect();
       setIsLive(false);
+      setAppState("welcome");
       console.log("Эфир остановлен");
     }
   }, [config, cameraStream, screenStream, micStream, liveKit]);
 
   // Если не авторизован — показать экран входа
   if (!user) {
-    return <AuthScreen onAuth={handleAuth} />;
+    return <AuthScreen onAuth={handleAuth} onLogout={handleLogout} />;
+  }
+
+  // Welcome-экран (после авторизации, до эфира)
+  if (user && appState === "welcome") {
+    return (
+      <>
+        {/* Модалка настроек доступна и на welcome-экране */}
+        {view === "settings" && (
+          <SettingsPanel
+            config={config}
+            onChange={setConfig}
+            onClose={() => setView("main")}
+            encoderDetection={encoderDetection}
+            systemInfo={systemInfo}
+            isLive={isLive}
+            connectionStats={connectionStats}
+          />
+        )}
+        <WelcomeCard
+          userName={user.name}
+          config={config}
+          sources={sources}
+          cameraStream={cameraStream}
+          screenStream={screenStream}
+          micEnabled={sources.find((s) => s.type === "microphone")?.enabled || false}
+          onToggleSource={handleToggleSource}
+          onStartScreenCapture={handleStartScreenCapture}
+          onStopScreenCapture={handleStopScreenCapture}
+          onOpenSettings={() => setView("settings")}
+          onStartLive={() => handleSetLive(true)}
+          onLogout={handleLogout}
+          liveKitConnecting={liveKit.connecting}
+          roomId={roomId}
+        />
+      </>
+    );
   }
 
   return (
@@ -476,23 +528,26 @@ export default function App() {
         qualityColor={qualityColor()}
       />
 
-      {/* Основной layout */}
+      {/* Основной layout (live-режим: без боковой панели) */}
       <div className="app-layout">
-        <Sidebar
-          sources={sources}
-          cameraStream={cameraStream}
-          screenStream={screenStream}
-          onToggleSource={handleToggleSource}
-          onUpdateSource={handleUpdateSource}
-          onStartScreenCapture={handleStartScreenCapture}
-          onStopScreenCapture={handleStopScreenCapture}
-          cameraCrop={cameraCrop}
-          screenCrop={screenCrop}
-          onCameraCropChange={setCameraCrop}
-          onScreenCropChange={setScreenCrop}
-          pipShape={pipShape}
-          onPipShapeChange={setPipShape}
-        />
+        {/* Sidebar скрыт в live-режиме */}
+        {appState !== "live" && (
+          <Sidebar
+            sources={sources}
+            cameraStream={cameraStream}
+            screenStream={screenStream}
+            onToggleSource={handleToggleSource}
+            onUpdateSource={handleUpdateSource}
+            onStartScreenCapture={handleStartScreenCapture}
+            onStopScreenCapture={handleStopScreenCapture}
+            cameraCrop={cameraCrop}
+            screenCrop={screenCrop}
+            onCameraCropChange={setCameraCrop}
+            onScreenCropChange={setScreenCrop}
+            pipShape={pipShape}
+            onPipShapeChange={setPipShape}
+          />
+        )}
 
         <div className="app-center">
           {/* Ошибка медиа */}
@@ -523,14 +578,16 @@ export default function App() {
             pipShape={pipShape}
           />
 
-          {/* Панель логов */}
-          <LogPanel
-            logs={logs}
-            visible={showLogs}
-            onClose={() => setShowLogs(false)}
-            onClear={clearLogs}
-            onExport={exportLogs}
-          />
+          {/* Панель логов — скрыта в live-режиме */}
+          {appState !== "live" && (
+            <LogPanel
+              logs={logs}
+              visible={showLogs}
+              onClose={() => setShowLogs(false)}
+              onClear={clearLogs}
+              onExport={exportLogs}
+            />
+          )}
         </div>
 
         {/* Панель чата */}
@@ -552,16 +609,13 @@ export default function App() {
         screenStream={screenStream}
         onToggleSource={handleToggleSource}
         onOpenSettings={() => setView("settings")}
-        onToggleLogs={() => setShowLogs((v) => !v)}
         onToggleChat={() => setShowChat((v) => !v)}
-        onCheckUpdates={checkForUpdates}
-        checkingUpdates={updateStatus === "checking"}
-        showLogs={showLogs}
         showChat={showChat}
         hostToken={hostToken}
         roomId={roomId}
         liveKitConnecting={liveKit.connecting}
         participantCount={liveKit.participantCount}
+        onGoBack={() => setAppState("welcome")}
       />
     </div>
   );

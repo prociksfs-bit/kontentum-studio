@@ -1,7 +1,7 @@
 {
   "name": "kontentum-studio",
-  "version": "0.9.1",
-  "description": "КОНТЕНТУМ Studio — десктопный стриминг-клиент",
+  "version": "1.0.0",
+  "description": "\u041a\u041e\u041d\u0422\u0415\u041d\u0422\u0423\u041c Studio \u2014 \u0434\u0435\u0441\u043a\u0442\u043e\u043f\u043d\u044b\u0439 \u0441\u0442\u0440\u0438\u043c\u0438\u043d\u0433-\u043a\u043b\u0438\u0435\u043d\u0442",
   "private": true,
   "type": "module",
   "scripts": {

@@ -14,16 +14,13 @@ interface Props {
   screenStream: MediaStream | null;
   onToggleSource: (id: string) => void;
   onOpenSettings: () => void;
-  onToggleLogs: () => void;
   onToggleChat: () => void;
-  onCheckUpdates: () => void;
-  checkingUpdates: boolean;
-  showLogs: boolean;
   showChat: boolean;
   hostToken: string;
   roomId: string;
   liveKitConnecting?: boolean;
   participantCount?: number;
+  onGoBack?: () => void;
 }
 
 /**
@@ -38,16 +35,13 @@ export default function BottomBar({
   screenStream,
   onToggleSource,
   onOpenSettings,
-  onToggleLogs,
   onToggleChat,
-  onCheckUpdates,
-  checkingUpdates,
-  showLogs,
   showChat,
   hostToken,
   roomId,
   liveKitConnecting,
   participantCount,
+  onGoBack,
 }: Props) {
   const [elapsed, setElapsed] = useState(0);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -55,6 +49,7 @@ export default function BottomBar({
   const [isRecording, setIsRecording] = useState(false);
   const [egressId, setEgressId] = useState<string | null>(null);
   const [recStatus, setRecStatus] = useState("");
+  const [recFile, setRecFile] = useState<string | null>(null);
 
   const formatTime = (seconds: number): string => {
     const h = Math.floor(seconds / 3600);
@@ -147,6 +142,9 @@ export default function BottomBar({
       setIsRecording(false);
       setEgressId(null);
       setRecStatus("");
+      if (data.filename) {
+        setRecFile(data.filename);
+      }
       console.log("Запись остановлена:", data.filename);
     } catch (e: any) {
       setRecStatus(`Ошибка остановки: ${e.message}`);
@@ -157,6 +155,23 @@ export default function BottomBar({
   const camSource = sources.find((s) => s.type === "camera");
 
   return (
+    <>
+      {/* Баннер готовой записи */}
+      {recFile && (
+        <div className="rec-done-banner">
+          <span>✅ Запись готова: <b>{recFile}</b></span>
+          <a
+            href={`${PLATFORM_URL}/vebinar/recordings/${recFile}`}
+            target="_blank"
+            rel="noreferrer"
+            className="rec-dl-link"
+          >
+            ⬇ Скачать
+          </a>
+          <button onClick={() => setRecFile(null)}>✕</button>
+        </div>
+      )}
+
     <div className="ctrl-bar">
       {/* Таймер */}
       <div className={`timer-display ${isLive ? "live" : ""}`}>
@@ -247,28 +262,20 @@ export default function BottomBar({
         Настройки
       </button>
 
-      {/* Логи */}
-      <button className={`cb ${showLogs ? "on" : ""}`} onClick={onToggleLogs}>
-        <span className="ci">📋</span>
-        Логи
-      </button>
-
       {/* Чат */}
       <button className={`cb ${showChat ? "on" : ""}`} onClick={onToggleChat}>
         <span className="ci">💬</span>
         Чат
       </button>
 
-      {/* Обновления */}
-      <button
-        className="cb"
-        onClick={onCheckUpdates}
-        disabled={checkingUpdates}
-        style={checkingUpdates ? { opacity: 0.5 } : undefined}
-      >
-        <span className="ci">{checkingUpdates ? "⏳" : "🔄"}</span>
-        {checkingUpdates ? "..." : "Обновить"}
-      </button>
+      {/* Кнопка возврата на welcome-экран (когда не в эфире) */}
+      {!isLive && onGoBack && (
+        <button className="cb" onClick={onGoBack}>
+          <span className="ci">←</span>
+          Назад
+        </button>
+      )}
     </div>
+    </>
   );
 }
