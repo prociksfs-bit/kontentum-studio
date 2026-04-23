@@ -25,6 +25,86 @@ interface Props {
   onPipShapeChange: (shape: "rect" | "round") => void;
 }
 
+/** Максимальное значение обрезки */
+const CROP_MAX = 50;
+
+/**
+ * Секция обрезки с ползунками и числовыми полями ввода.
+ */
+function CropSection({
+  title,
+  crop,
+  onCropChange,
+}: {
+  title: string;
+  crop: CropSettings;
+  onCropChange: (crop: CropSettings) => void;
+}) {
+  const sides = ["top", "bottom", "left", "right"] as const;
+  const labels: Record<string, string> = {
+    top: "Верх",
+    bottom: "Низ",
+    left: "Лево",
+    right: "Право",
+  };
+
+  /** Обработчик изменения числового поля */
+  const handleInputChange = useCallback(
+    (side: keyof CropSettings, rawValue: string) => {
+      const parsed = parseInt(rawValue, 10);
+      const value = isNaN(parsed) ? 0 : Math.max(0, Math.min(CROP_MAX, parsed));
+      onCropChange({ ...crop, [side]: value });
+    },
+    [crop, onCropChange],
+  );
+
+  /** Сброс всех значений */
+  const handleReset = useCallback(() => {
+    onCropChange({ top: 0, bottom: 0, left: 0, right: 0 });
+  }, [onCropChange]);
+
+  const hasCrop = crop.top > 0 || crop.bottom > 0 || crop.left > 0 || crop.right > 0;
+
+  return (
+    <div className="crop-section">
+      <div className="crop-title-row">
+        <div className="crop-title">{title}</div>
+        {hasCrop && (
+          <button
+            className="crop-reset-btn"
+            onClick={handleReset}
+            title="Сбросить обрезку"
+          >
+            Сброс
+          </button>
+        )}
+      </div>
+      {sides.map((side) => (
+        <div className="crop-row" key={side}>
+          <span className="crop-label">{labels[side]}</span>
+          <input
+            type="range"
+            className="crop-slider"
+            min={0}
+            max={CROP_MAX}
+            value={crop[side]}
+            onChange={(e) => onCropChange({ ...crop, [side]: Number(e.target.value) })}
+          />
+          <input
+            type="number"
+            className="crop-number-input"
+            min={0}
+            max={CROP_MAX}
+            value={crop[side]}
+            onChange={(e) => handleInputChange(side, e.target.value)}
+          />
+          <span className="crop-value-unit">%</span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 /**
  * Боковая панель с управлением устройствами, захватом экрана и кроппингом.
  */
@@ -130,25 +210,11 @@ export default function Sidebar({
 
           {/* Кроппинг камеры */}
           {cameraSource?.enabled && cameraStream && (
-            <div className="crop-section">
-              <div className="crop-title">Обрезка камеры</div>
-              {(["top", "bottom", "left", "right"] as const).map((side) => (
-                <div className="crop-row" key={side}>
-                  <span className="crop-label">
-                    {side === "top" ? "Верх" : side === "bottom" ? "Низ" : side === "left" ? "Лево" : "Право"}
-                  </span>
-                  <input
-                    type="range"
-                    className="crop-slider"
-                    min={0}
-                    max={40}
-                    value={cameraCrop[side]}
-                    onChange={(e) => onCameraCropChange({ ...cameraCrop, [side]: Number(e.target.value) })}
-                  />
-                  <span className="crop-value">{cameraCrop[side]}%</span>
-                </div>
-              ))}
-            </div>
+            <CropSection
+              title="Обрезка камеры"
+              crop={cameraCrop}
+              onCropChange={onCameraCropChange}
+            />
           )}
         </div>
       </div>
@@ -241,25 +307,11 @@ export default function Sidebar({
               </div>
 
               {/* Кроппинг экрана */}
-              <div className="crop-section">
-                <div className="crop-title">Обрезка экрана</div>
-                {(["top", "bottom", "left", "right"] as const).map((side) => (
-                  <div className="crop-row" key={side}>
-                    <span className="crop-label">
-                      {side === "top" ? "Верх" : side === "bottom" ? "Низ" : side === "left" ? "Лево" : "Право"}
-                    </span>
-                    <input
-                      type="range"
-                      className="crop-slider"
-                      min={0}
-                      max={40}
-                      value={screenCrop[side]}
-                      onChange={(e) => onScreenCropChange({ ...screenCrop, [side]: Number(e.target.value) })}
-                    />
-                    <span className="crop-value">{screenCrop[side]}%</span>
-                  </div>
-                ))}
-              </div>
+              <CropSection
+                title="Обрезка экрана"
+                crop={screenCrop}
+                onCropChange={onScreenCropChange}
+              />
             </>
           )}
         </div>

@@ -538,6 +538,7 @@ export default function App() {
           visible={showChat}
           onClose={() => setShowChat(false)}
           userName={user.name}
+          room={liveKit.getRoom()}
         />
       </div>
 

@@ -799,7 +799,7 @@ body::before {
 /* Затемнённые обрезанные зоны */
 .crop-dim {
   position: absolute;
-  background: rgba(0, 0, 0, 0.55);
+  background: rgba(0, 0, 0, 0.65);
   pointer-events: none;
   transition: all 0.05s ease;
 }
@@ -812,10 +812,10 @@ body::before {
   transition: background 0.15s;
 }
 
-/* Горизонтальные ручки (верх/низ) */
+/* Горизонтальные ручки (верх/низ) — увеличена зона захвата до 16px */
 .crop-handle-h {
-  height: 8px;
-  margin-top: -4px;
+  height: 16px;
+  margin-top: -8px;
   cursor: ns-resize;
   background: linear-gradient(
     to right,
@@ -831,10 +831,10 @@ body::before {
   background-position: center;
 }
 
-/* Вертикальные ручки (лево/право) */
+/* Вертикальные ручки (лево/право) — увеличена зона захвата до 16px */
 .crop-handle-v {
-  width: 8px;
-  margin-left: -4px;
+  width: 16px;
+  margin-left: -8px;
   cursor: ew-resize;
   background: linear-gradient(
     to bottom,
@@ -858,40 +858,171 @@ body::before {
   background-color: rgba(0, 245, 255, 0.2);
 }
 
-/* Угловые маркеры — L-образные уголки */
+/* Угловые ручки — L-образные уголки, ИНТЕРАКТИВНЫЕ */
 .crop-corner {
+  position: absolute;
+  width: 20px;
+  height: 20px;
+  z-index: 23;
+  pointer-events: auto;
+}
+
+/* Увеличенная зона захвата для углов */
+.crop-corner::after {
+  content: '';
   position: absolute;
   width: 16px;
   height: 16px;
-  z-index: 22;
-  pointer-events: none;
 }
 
 .crop-corner-tl {
   border-top: 3px solid rgba(0, 245, 255, 0.9);
   border-left: 3px solid rgba(0, 245, 255, 0.9);
+  cursor: nwse-resize;
+  margin-top: -2px;
+  margin-left: -2px;
+}
+
+.crop-corner-tl::after {
+  top: -6px;
+  left: -6px;
 }
 
 .crop-corner-tr {
   border-top: 3px solid rgba(0, 245, 255, 0.9);
   border-right: 3px solid rgba(0, 245, 255, 0.9);
+  cursor: nesw-resize;
   transform: translateX(100%);
-  margin-right: -16px;
+  margin-right: -20px;
+  margin-top: -2px;
+}
+
+.crop-corner-tr::after {
+  top: -6px;
+  right: -6px;
 }
 
 .crop-corner-bl {
   border-bottom: 3px solid rgba(0, 245, 255, 0.9);
   border-left: 3px solid rgba(0, 245, 255, 0.9);
+  cursor: nesw-resize;
   transform: translateY(100%);
-  margin-bottom: -16px;
+  margin-bottom: -20px;
+  margin-left: -2px;
+}
+
+.crop-corner-bl::after {
+  bottom: -6px;
+  left: -6px;
 }
 
 .crop-corner-br {
   border-bottom: 3px solid rgba(0, 245, 255, 0.9);
   border-right: 3px solid rgba(0, 245, 255, 0.9);
+  cursor: nwse-resize;
   transform: translate(100%, 100%);
-  margin-right: -16px;
-  margin-bottom: -16px;
+  margin-right: -20px;
+  margin-bottom: -20px;
+}
+
+.crop-corner-br::after {
+  bottom: -6px;
+  right: -6px;
+}
+
+.crop-corner:hover {
+  border-color: rgba(0, 245, 255, 1);
+  filter: drop-shadow(0 0 4px rgba(0, 245, 255, 0.5));
+}
+
+.crop-corner.active {
+  border-color: rgba(0, 245, 255, 1);
+  filter: drop-shadow(0 0 8px rgba(0, 245, 255, 0.7));
+}
+
+/* Сетка третей — видна только при активном перетаскивании */
+.crop-thirds-grid {
+  position: absolute;
+  pointer-events: none;
+  z-index: 20;
+}
+
+.thirds-line {
+  position: absolute;
+  background: rgba(255, 255, 255, 0.2);
+}
+
+.thirds-h {
+  left: 0;
+  right: 0;
+  height: 1px;
+}
+
+.thirds-v {
+  top: 0;
+  bottom: 0;
+  width: 1px;
+}
+
+/* Бейдж аспекта */
+.crop-aspect-badge {
+  position: absolute;
+  z-index: 25;
+  background: rgba(0, 10, 30, 0.85);
+  color: var(--cyan);
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-size: 9px;
+  font-family: 'JetBrains Mono', monospace;
+  font-weight: 700;
+  letter-spacing: 1px;
+  border: 1px solid rgba(0, 245, 255, 0.3);
+  pointer-events: none;
+}
+
+/* Пресеты аспекта в превью */
+.crop-aspect-presets {
+  position: absolute;
+  bottom: 12px;
+  right: 12px;
+  z-index: 25;
+  display: flex;
+  gap: 4px;
+  pointer-events: auto;
+}
+
+.crop-aspect-btn {
+  padding: 3px 8px;
+  border-radius: 6px;
+  border: 1px solid rgba(0, 245, 255, 0.2);
+  background: rgba(0, 10, 30, 0.85);
+  color: var(--muted);
+  cursor: pointer;
+  font-size: 10px;
+  font-weight: 600;
+  font-family: 'JetBrains Mono', monospace;
+  transition: all 0.15s;
+  backdrop-filter: blur(8px);
+}
+
+.crop-aspect-btn:hover {
+  border-color: rgba(0, 245, 255, 0.4);
+  color: var(--text);
+}
+
+.crop-aspect-btn.active {
+  border-color: var(--cyan);
+  background: rgba(0, 245, 255, 0.15);
+  color: var(--cyan);
+}
+
+/* Тонкое свечение на границе crop-области для видимости на любом контенте */
+.crop-overlay::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 19;
 }
 
 /* Подсказка режима обрезки */
@@ -1991,4 +2122,78 @@ body::before {
 .chat-send-btn:disabled {
   opacity: 0.3;
   cursor: not-allowed;
+}
+
+/* ===== Кнопка тогла режима обрезки ===== */
+.crop-toggle-btn {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  z-index: 20;
+  padding: 6px 12px;
+  border-radius: 8px;
+  border: 1px solid rgba(0, 245, 255, 0.25);
+  background: rgba(0, 8, 24, 0.75);
+  color: rgba(0, 245, 255, 0.7);
+  font-size: 11px;
+  font-family: 'Exo 2', sans-serif;
+  font-weight: 600;
+  cursor: pointer;
+  letter-spacing: 0.05em;
+  transition: all 0.2s;
+  backdrop-filter: blur(8px);
+}
+
+.crop-toggle-btn:hover {
+  border-color: rgba(0, 245, 255, 0.5);
+  color: var(--cyan);
+  background: rgba(0, 20, 48, 0.85);
+}
+
+.crop-toggle-btn.active {
+  border-color: rgba(255, 200, 0, 0.6);
+  color: rgba(255, 200, 0, 0.9);
+  background: rgba(40, 30, 0, 0.85);
+  box-shadow: 0 0 12px rgba(255, 200, 0, 0.15);
+}
+
+/* ===== Статус-бар чата ===== */
+.chat-status-bar {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 12px;
+  font-size: 10px;
+  font-family: 'Exo 2', sans-serif;
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+}
+
+.chat-status-bar.online {
+  color: rgba(0, 220, 120, 0.85);
+}
+
+.chat-status-bar.offline {
+  color: var(--muted);
+}
+
+.chat-status-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.chat-status-bar.online .chat-status-dot {
+  background: rgba(0, 220, 120, 0.9);
+  box-shadow: 0 0 6px rgba(0, 220, 120, 0.5);
+}
+
+.chat-status-bar.offline .chat-status-dot {
+  background: var(--muted);
+}
+
+/* Имя ведущего в чате */
+.chat-sender.presenter-name {
+  color: var(--cyan);
 }
