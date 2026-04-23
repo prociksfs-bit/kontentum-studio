@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect, useRef } from "react";
 
 export interface UserInfo {
   id: number;
@@ -10,23 +10,52 @@ export interface AuthResult {
   user: UserInfo;
   serverUrl: string;
   token: string;
+  hostToken: string;
+  roomId: string;
 }
 
 interface Props {
   onAuth: (result: AuthResult) => void;
 }
 
+// URL платформы КОНТЕНТУМ
+const PLATFORM_URL = "https://контентум.рф";
+
 /**
  * Экран авторизации через MAX.
  * Поддерживает OAuth через MAX и ручной ввод данных подключения.
+ *
+ * MAX OAuth flow:
+ * 1. POST /vebinar/api/max-auth-init → { code, deepLink }
+ * 2. Открываем deepLink в браузере (https://max.ru/id..._bot?start=wbr_{code})
+ * 3. Поллинг GET /vebinar/api/max-auth-poll?code={code} каждые 2 сек
+ * 4. Когда { ready: true, hostToken, displayName } → создаём комнату + получаем LiveKit токен
  */
 export default function AuthScreen({ onAuth }: Props) {
-  const [mode, setMode] = useState<"choice" | "manual">("choice");
+  const [mode, setMode] = useState<"choice" | "polling" | "manual">("choice");
   const [serverUrl, setServerUrl] = useState("");
   const [token, setToken] = useState("");
   const [displayName, setDisplayName] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+  const [pollStatus, setPollStatus] = useState("Ожидаем подтверждение в MAX...");
+  const pollTimer = useRef<ReturnType<typeof setInterval> | null>(null);
+  const authCode = useRef<string | null>(null);
+
+  // Очищаем поллинг при размонтировании
+  useEffect(() => {
+    return () => {
+      if (pollTimer.current) clearInterval(pollTimer.current);
+    };
+  }, []);
+
+  // Остановить поллинг
+  const stopPolling = () => {
+    if (pollTimer.current) {
+      clearInterval(pollTimer.current);
+      pollTimer.current = null;
+    }
+  };
 
   // Авторизация через MAX (OAuth)
   const handleMaxLogin = async () => {
@@ -34,21 +63,115 @@ export default function AuthScreen({ onAuth }: Props) {
     setError("");
 
     try {
-      // Открываем OAuth страницу MAX в системном браузере
-      // После авторизации MAX перенаправит на callback URL
-      // и мы получим токен доступа
-      const { open } = await import("@tauri-apps/plugin-shell");
-      await open("https://xn--e1afkbacih0dza.xn--p1acf/vebinar/auth/max");
+      // Шаг 1: инициализируем сессию авторизации на сервере
+      const initResp = await fetch(`${PLATFORM_URL}/vebinar/api/max-auth-init`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+      });
 
-      // Пока OAuth не настроен - показываем ручной режим
-      setMode("manual");
-      setError("OAuth MAX в разработке. Введите данные подключения вручную.");
-    } catch (err) {
-      // Fallback - переключаемся на ручной режим
-      setMode("manual");
+      if (!initResp.ok) {
+        throw new Error(`Ошибка сервера: ${initResp.status}`);
+      }
+
+      const { code, deepLink } = await initResp.json();
+      authCode.current = code;
+
+      // Шаг 2: открываем deepLink в системном браузере
+      // (https://max.ru/id..._bot?start=wbr_{code})
+      const { open } = await import("@tauri-apps/plugin-shell");
+      await open(deepLink);
+
+      // Шаг 3: переходим в режим ожидания и начинаем поллинг
+      setMode("polling");
+      setPollStatus("Откройте MAX и подтвердите вход...");
+
+      pollTimer.current = setInterval(async () => {
+        try {
+          const pollResp = await fetch(
+            `${PLATFORM_URL}/vebinar/api/max-auth-poll?code=${authCode.current}`
+          );
+
+          if (!pollResp.ok) {
+            stopPolling();
+            setMode("choice");
+            setError("Сессия истекла. Попробуйте ещё раз.");
+            return;
+          }
+
+          const data = await pollResp.json();
+
+          if (!data.ready) {
+            setPollStatus("Ожидаем подтверждение в MAX...");
+            return;
+          }
+
+          // Авторизован!
+          stopPolling();
+          setPollStatus("Авторизован! Создаём комнату...");
+
+          const { hostToken, displayName: userName, user } = data;
+
+          // Шаг 4: создаём комнату вебинара
+          const roomResp = await fetch(`${PLATFORM_URL}/vebinar/api/create-room`, {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              "X-Host-Token": hostToken,
+            },
+            body: JSON.stringify({ name: "Вебинар" }),
+          });
+
+          if (!roomResp.ok) {
+            throw new Error("Не удалось создать комнату");
+          }
+
+          const { roomId } = await roomResp.json();
+
+          // Шаг 5: получаем LiveKit токен ведущего
+          const tokenResp = await fetch(`${PLATFORM_URL}/vebinar/api/token`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ room: roomId, name: userName, role: "presenter" }),
+          });
+
+          if (!tokenResp.ok) {
+            throw new Error("Не удалось получить токен LiveKit");
+          }
+
+          const { token: lkToken, wsUrl } = await tokenResp.json();
+
+          // Готово — передаём результат в App
+          onAuth({
+            user: {
+              id: user?.id ?? Date.now(),
+              name: userName,
+              username: user?.username,
+            },
+            serverUrl: wsUrl,
+            token: lkToken,
+            hostToken,
+            roomId,
+          });
+        } catch (e: any) {
+          stopPolling();
+          setMode("choice");
+          setError(`Ошибка авторизации: ${e.message}`);
+        }
+      }, 2000);
+    } catch (err: any) {
+      setMode("choice");
+      setError(`Не удалось подключиться к платформе: ${err.message}`);
     } finally {
       setLoading(false);
     }
+  };
+
+  // Отмена поллинга
+  const handleCancelPolling = () => {
+    stopPolling();
+    authCode.current = null;
+    setMode("choice");
+    setError("");
   };
 
   // Ручное подключение
@@ -72,6 +195,8 @@ export default function AuthScreen({ onAuth }: Props) {
       },
       serverUrl: serverUrl.trim(),
       token: token.trim(),
+      hostToken: "",
+      roomId: "",
     });
   };
 
@@ -105,12 +230,14 @@ export default function AuthScreen({ onAuth }: Props) {
               {loading ? "Подключение..." : "Войти через MAX"}
             </button>
 
+            {error && <div className="auth-error">{error}</div>}
+
             <div className="auth-divider">ИЛИ</div>
 
             {/* Ручной ввод */}
             <button
               className="auth-btn-max"
-              onClick={() => setMode("manual")}
+              onClick={() => { setMode("manual"); setError(""); }}
               style={{
                 background: "rgba(0, 15, 45, 0.6)",
                 boxShadow: "none",
@@ -118,6 +245,34 @@ export default function AuthScreen({ onAuth }: Props) {
               }}
             >
               Ввести данные вручную
+            </button>
+          </>
+        )}
+
+        {mode === "polling" && (
+          <>
+            <div className="auth-title">Ожидание MAX</div>
+            <div className="auth-subtitle">
+              В браузере открылся MAX — подтвердите вход в боте
+            </div>
+
+            <div className="auth-polling">
+              <div className="polling-dot" />
+              <span>{pollStatus}</span>
+            </div>
+
+            <button
+              className="auth-btn-max"
+              onClick={handleCancelPolling}
+              style={{
+                background: "transparent",
+                boxShadow: "none",
+                border: "1px solid rgba(0, 245, 255, 0.15)",
+                fontSize: 13,
+                marginTop: 16,
+              }}
+            >
+              Отмена
             </button>
           </>
         )}

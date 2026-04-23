@@ -131,8 +131,9 @@ export default function App() {
       ...prev,
       serverUrl: result.serverUrl,
       token: result.token,
+      roomName: result.roomId || prev.roomName,
     }));
-    console.log(`Авторизация: ${result.user.name} | Сервер: ${result.serverUrl ? "подключён" : "не указан"}`);
+    console.log(`Авторизация: ${result.user.name} | Сервер: ${result.serverUrl ? "подключён" : "не указан"} | Комната: ${result.roomId || "не создана"}`);
   }, []);
 
   // Переключение источника (камера/микрофон)

@@ -404,6 +404,33 @@ body::before {
   border-radius: 8px;
 }
 
+.auth-polling {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 14px 18px;
+  background: rgba(0, 245, 255, 0.06);
+  border: 1px solid rgba(0, 245, 255, 0.2);
+  border-radius: 12px;
+  font-size: 13px;
+  color: var(--accent2);
+  margin-top: 8px;
+}
+
+.polling-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--accent2);
+  flex-shrink: 0;
+  animation: blink 1.2s ease-in-out infinite;
+}
+
+@keyframes blink {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.2; }
+}
+
 .auth-user-badge {
   display: flex;
   align-items: center;
