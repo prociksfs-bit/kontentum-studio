@@ -5,12 +5,14 @@ interface Props {
   config: StreamConfig;
   userName?: string;
   version: string;
+  theme: "dark" | "light";
+  onToggleTheme: () => void;
 }
 
 /**
- * Верхняя панель приложения — логотип, статус, имя пользователя.
+ * Верхняя панель приложения — логотип, статус, имя пользователя, переключатель темы.
  */
-export default function HeaderBar({ isLive, config, userName, version }: Props) {
+export default function HeaderBar({ isLive, config, userName, version, theme, onToggleTheme }: Props) {
   return (
     <div className="app-header">
       <span className="hdr-logo">КОНТЕНТУМ STUDIO</span>
@@ -29,6 +31,15 @@ export default function HeaderBar({ isLive, config, userName, version }: Props) 
           <span className={`csd ${config.serverUrl ? (isLive ? "green" : "amber") : "red"}`} />
           {config.serverUrl ? (isLive ? "В эфире" : "Готов") : "Нет подключения"}
         </div>
+
+        {/* Переключатель темы */}
+        <button
+          className="theme-toggle-btn"
+          onClick={onToggleTheme}
+          title={theme === "dark" ? "Светлая тема" : "Тёмная тема"}
+        >
+          {theme === "dark" ? "☀️" : "🌙"}
+        </button>
 
         {/* Имя пользователя */}
         {userName && (

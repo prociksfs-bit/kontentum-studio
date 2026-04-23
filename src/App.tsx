@@ -1,4 +1,4 @@
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect } from "react";
 import AuthScreen from "./components/AuthScreen";
 import type { AuthResult, UserInfo } from "./components/AuthScreen";
 import Sidebar from "./components/Sidebar";
@@ -8,6 +8,7 @@ import BottomBar from "./components/BottomBar";
 import SettingsPanel from "./components/SettingsPanel";
 import LogPanel from "./components/LogPanel";
 import UpdateBanner from "./components/UpdateBanner";
+import ChatPanel from "./components/ChatPanel";
 import { useAppLogger } from "./lib/useAppLogger";
 import { useUpdateChecker } from "./lib/useUpdateChecker";
 
@@ -88,6 +89,33 @@ export default function App() {
 
   // Форма PiP
   const [pipShape, setPipShape] = useState<"rect" | "round">("rect");
+
+  // Чат
+  const [showChat, setShowChat] = useState(false);
+
+  // Тема (dark по умолчанию, сохраняется в localStorage)
+  const [theme, setTheme] = useState<"dark" | "light">(() => {
+    try {
+      return (localStorage.getItem("kontentum-theme") as "dark" | "light") || "dark";
+    } catch {
+      return "dark";
+    }
+  });
+
+  // Применяем тему при изменении
+  useEffect(() => {
+    document.documentElement.setAttribute("data-theme", theme);
+    try {
+      localStorage.setItem("kontentum-theme", theme);
+    } catch {
+      // localStorage недоступен
+    }
+  }, [theme]);
+
+  // Переключение темы
+  const toggleTheme = useCallback(() => {
+    setTheme((prev) => (prev === "dark" ? "light" : "dark"));
+  }, []);
 
   // Лог при старте
   useState(() => {
@@ -191,12 +219,31 @@ export default function App() {
     }
   }, [sources, cameraStream]);
 
-  // Захват экрана
+  // Определение платформы macOS
+  const isMacOS = /mac/i.test(navigator.platform) || /mac/i.test(navigator.userAgent);
+
+  // Захват экрана с обработкой ограничений WKWebView на macOS
   const handleStartScreenCapture = useCallback(async () => {
-    if (!hasMediaDevices()) {
-      const msg = "MediaDevices API недоступен. Захват экрана невозможен.";
-      console.error(msg);
-      setMediaError(msg);
+    // Проверяем наличие getDisplayMedia API
+    const hasDisplayMedia = !!(
+      navigator?.mediaDevices && typeof navigator.mediaDevices.getDisplayMedia === "function"
+    );
+
+    if (!hasDisplayMedia) {
+      // На macOS WKWebView может не поддерживать getDisplayMedia
+      if (isMacOS) {
+        const msg =
+          "Захват экрана недоступен в WKWebView на macOS. " +
+          "Убедитесь, что приложению дано разрешение «Запись экрана» " +
+          "в Системных настройках → Конфиденциальность и безопасность → Запись экрана. " +
+          "После выдачи разрешения перезапустите приложение.";
+        console.error(msg);
+        setMediaError(msg);
+      } else {
+        const msg = "getDisplayMedia API недоступен. Захват экрана невозможен.";
+        console.error(msg);
+        setMediaError(msg);
+      }
       return;
     }
 
@@ -215,11 +262,15 @@ export default function App() {
         console.log("Захват экрана остановлен пользователем");
       };
     } catch (err: any) {
-      const msg = `Ошибка захвата экрана: ${err.message || "Отменено пользователем"}`;
+      let msg = `Ошибка захвата экрана: ${err.message || "Отменено пользователем"}`;
+      if (isMacOS) {
+        msg +=
+          " | macOS: проверьте разрешение «Запись экрана» в Системных настройках → Конфиденциальность и безопасность.";
+      }
       console.error(msg);
       setMediaError(msg);
     }
-  }, []);
+  }, [isMacOS]);
 
   const handleStopScreenCapture = useCallback(() => {
     if (screenStream) {
@@ -266,6 +317,8 @@ export default function App() {
         config={config}
         userName={user.name}
         version={APP_VERSION}
+        theme={theme}
+        onToggleTheme={toggleTheme}
       />
 
       {/* Основной layout */}
@@ -314,6 +367,13 @@ export default function App() {
             onExport={exportLogs}
           />
         </div>
+
+        {/* Панель чата */}
+        <ChatPanel
+          visible={showChat}
+          onClose={() => setShowChat(false)}
+          userName={user.name}
+        />
       </div>
 
       {/* Нижняя панель управления */}
@@ -327,9 +387,11 @@ export default function App() {
         onToggleSource={handleToggleSource}
         onOpenSettings={() => setView("settings")}
         onToggleLogs={() => setShowLogs((v) => !v)}
+        onToggleChat={() => setShowChat((v) => !v)}
         onCheckUpdates={checkForUpdates}
         checkingUpdates={checking}
         showLogs={showLogs}
+        showChat={showChat}
       />
     </div>
   );

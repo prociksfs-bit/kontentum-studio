@@ -11,9 +11,11 @@ interface Props {
   onToggleSource: (id: string) => void;
   onOpenSettings: () => void;
   onToggleLogs: () => void;
+  onToggleChat: () => void;
   onCheckUpdates: () => void;
   checkingUpdates: boolean;
   showLogs: boolean;
+  showChat: boolean;
 }
 
 /**
@@ -29,9 +31,11 @@ export default function BottomBar({
   onToggleSource,
   onOpenSettings,
   onToggleLogs,
+  onToggleChat,
   onCheckUpdates,
   checkingUpdates,
   showLogs,
+  showChat,
 }: Props) {
   const [elapsed, setElapsed] = useState(0);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -130,6 +134,15 @@ export default function BottomBar({
       >
         <span className="ci">📋</span>
         Логи
+      </button>
+
+      {/* Чат */}
+      <button
+        className={`cb ${showChat ? "on" : ""}`}
+        onClick={onToggleChat}
+      >
+        <span className="ci">💬</span>
+        Чат
       </button>
 
       {/* Обновления */}

@@ -38,7 +38,7 @@ export default function AuthScreen({ onAuth }: Props) {
       // После авторизации MAX перенаправит на callback URL
       // и мы получим токен доступа
       const { open } = await import("@tauri-apps/plugin-shell");
-      await open("https://procik.ru/vebinar/auth/max");
+      await open("https://xn--e1afkbacih0dza.xn--p1acf/vebinar/auth/max");
 
       // Пока OAuth не настроен - показываем ручной режим
       setMode("manual");

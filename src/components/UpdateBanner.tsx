@@ -28,10 +28,12 @@ export default function UpdateBanner({
         <span className="update-icon">🚀</span>
         <div className="update-text">
           <strong>Доступна версия {updateInfo.latestVersion}</strong>
-          <span className="update-sub">Текущая: {updateInfo.currentVersion}</span>
+          <span className="update-sub">
+            Текущая: {updateInfo.currentVersion} — Скачайте и замените приложение в Applications
+          </span>
         </div>
         <button className="update-btn download" onClick={onDownload}>
-          Скачать
+          Скачать обновление
         </button>
         <button className="update-btn dismiss" onClick={onDismiss}>
           ✕
