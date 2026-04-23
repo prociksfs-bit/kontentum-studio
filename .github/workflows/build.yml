@@ -58,10 +58,13 @@ jobs:
         uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ""
         with:
           tagName: v__VERSION__
           releaseName: "КОНТЕНТУМ Studio v__VERSION__"
           releaseBody: "Скачайте установщик для вашей платформы ниже."
           releaseDraft: false
           prerelease: false
+          includeUpdaterJson: true
           args: --target ${{ matrix.target }}

@@ -7,12 +7,13 @@ interface Props {
   version: string;
   theme: "dark" | "light";
   onToggleTheme: () => void;
+  participantCount?: number;
 }
 
 /**
  * Верхняя панель приложения — логотип, статус, имя пользователя, переключатель темы.
  */
-export default function HeaderBar({ isLive, config, userName, version, theme, onToggleTheme }: Props) {
+export default function HeaderBar({ isLive, config, userName, version, theme, onToggleTheme, participantCount }: Props) {
   return (
     <div className="app-header">
       <span className="hdr-logo">КОНТЕНТУМ STUDIO</span>
@@ -24,6 +25,9 @@ export default function HeaderBar({ isLive, config, userName, version, theme, on
           <div className="live-pill">
             <span className="live-dot" />
             LIVE
+            {participantCount !== undefined && participantCount > 0 && (
+              <span style={{ marginLeft: 6, opacity: 0.7 }}>👥 {participantCount}</span>
+            )}
           </div>
         )}
 

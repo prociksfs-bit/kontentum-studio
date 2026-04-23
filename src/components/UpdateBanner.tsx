@@ -4,6 +4,7 @@ interface Props {
   checking: boolean;
   updateInfo: UpdateInfo | null;
   error: string | null;
+  installing?: boolean;
   onCheck: () => void;
   onDownload: () => void;
   onDismiss: () => void;
@@ -11,16 +12,30 @@ interface Props {
 
 /**
  * Баннер обновлений.
- * Показывает кнопку проверки и уведомление о новой версии.
+ * Поддерживает нативное обновление через Tauri Updater и скачивание из GitHub.
  */
 export default function UpdateBanner({
   checking,
   updateInfo,
   error,
+  installing,
   onCheck,
   onDownload,
   onDismiss,
 }: Props) {
+  // Процесс установки
+  if (installing) {
+    return (
+      <div className="update-banner available">
+        <span className="update-icon">⏳</span>
+        <div className="update-text">
+          <strong>Устанавливаем обновление...</strong>
+          <span className="update-sub">Не закрывайте приложение. После установки оно перезапустится автоматически.</span>
+        </div>
+      </div>
+    );
+  }
+
   // Если есть обновление — показываем баннер
   if (updateInfo?.available) {
     return (
@@ -29,11 +44,11 @@ export default function UpdateBanner({
         <div className="update-text">
           <strong>Доступна версия {updateInfo.latestVersion}</strong>
           <span className="update-sub">
-            Текущая: {updateInfo.currentVersion} — Скачайте и замените приложение в Applications
+            Текущая: {updateInfo.currentVersion}
           </span>
         </div>
         <button className="update-btn download" onClick={onDownload}>
-          Скачать обновление
+          {updateInfo.downloadUrl ? "Скачать" : "Обновить сейчас"}
         </button>
         <button className="update-btn dismiss" onClick={onDismiss}>
           ✕

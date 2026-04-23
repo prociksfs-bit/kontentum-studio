@@ -11,6 +11,7 @@ import UpdateBanner from "./components/UpdateBanner";
 import ChatPanel from "./components/ChatPanel";
 import { useAppLogger } from "./lib/useAppLogger";
 import { useUpdateChecker } from "./lib/useUpdateChecker";
+import { useLiveKit } from "./lib/useLiveKit";
 
 /** Тип кодировщика */
 export type EncoderType = "auto" | "videotoolbox" | "nvenc" | "qsv" | "cpu";
@@ -56,10 +57,13 @@ const APP_VERSION = typeof __APP_VERSION__ !== "undefined" ? __APP_VERSION__ : "
 export default function App() {
   // Логгер
   const { logs, clearLogs, exportLogs } = useAppLogger();
-  const [showLogs, setShowLogs] = useState(true); // Логи видимы по умолчанию
+  const [showLogs, setShowLogs] = useState(true);
 
   // Обновления
-  const { checking, updateInfo, error: updateError, checkForUpdates, openDownload, dismiss } = useUpdateChecker();
+  const { checking, updateInfo, error: updateError, installing, checkForUpdates, openDownload, dismiss } = useUpdateChecker();
+
+  // LiveKit
+  const liveKit = useLiveKit();
 
   // Авторизация
   const [user, setUser] = useState<UserInfo | null>(null);
@@ -89,6 +93,9 @@ export default function App() {
   // Стримы
   const [cameraStream, setCameraStream] = useState<MediaStream | null>(null);
   const [screenStream, setScreenStream] = useState<MediaStream | null>(null);
+
+  // Микрофон стрим (отдельно)
+  const [micStream, setMicStream] = useState<MediaStream | null>(null);
 
   // Кроппинг
   const [cameraCrop, setCameraCrop] = useState<CropSettings>({ top: 0, bottom: 0, left: 0, right: 0 });
@@ -128,7 +135,13 @@ export default function App() {
   useState(() => {
     console.log(`КОНТЕНТУМ Studio v${APP_VERSION} запущен`);
     console.log(`Платформа: ${navigator.platform}`);
-    console.log(`MediaDevices API: ${hasMediaDevices() ? "доступен" : "НЕДОСТУПЕН"}`);
+    console.log(`UserAgent: ${navigator.userAgent}`);
+    console.log(`MediaDevices API: ${hasMediaDevices() ? "доступен ✅" : "НЕДОСТУПЕН ❌"}`);
+    console.log(`Secure context: ${window.isSecureContext ? "да ✅" : "нет ❌"}`);
+    console.log(`Protocol: ${window.location.protocol}`);
+    if (!window.isSecureContext) {
+      console.warn("Приложение НЕ в secure context — MediaDevices API будет недоступен! Нужен useHttpsScheme: true в tauri.conf.json");
+    }
   });
 
   // Авторизация
@@ -142,7 +155,10 @@ export default function App() {
       token: result.token,
       roomName: result.roomId || prev.roomName,
     }));
-    console.log(`Авторизация: ${result.user.name} | Комната: ${result.roomId || "не создана"}`);
+    console.log(`Авторизация: ${result.user.name} | Сервер: ${result.serverUrl ? "подключён" : "не указан"}`);
+    if (result.roomId) {
+      console.log(`Комната: ${result.roomId}`);
+    }
   }, []);
 
   // Переключение источника (камера/микрофон)
@@ -156,7 +172,9 @@ export default function App() {
     // Если включаем камеру — запустить поток
     if (source.type === "camera" && newEnabled && !cameraStream) {
       if (!hasMediaDevices()) {
-        const msg = "MediaDevices API недоступен. Камера не может быть подключена.";
+        const msg = window.isSecureContext
+          ? "MediaDevices API недоступен. Проверьте разрешения камеры в настройках системы."
+          : "MediaDevices API недоступен: приложение не в secure context. Это критическая ошибка сборки.";
         console.error(msg);
         setMediaError(msg);
         return;
@@ -189,27 +207,47 @@ export default function App() {
     // Если включаем микрофон
     if (source.type === "microphone" && newEnabled) {
       if (!hasMediaDevices()) {
-        const msg = "MediaDevices API недоступен. Микрофон не может быть подключён.";
+        const msg = window.isSecureContext
+          ? "MediaDevices API недоступен. Проверьте разрешения микрофона в настройках системы."
+          : "MediaDevices API недоступен: приложение не в secure context.";
         console.error(msg);
         setMediaError(msg);
         return;
       }
-      console.log("Микрофон включён");
+
+      try {
+        console.log("Запуск микрофона...");
+        const stream = await navigator.mediaDevices.getUserMedia({
+          audio: source.deviceId ? { deviceId: { exact: source.deviceId } } : true,
+          video: false,
+        });
+        setMicStream(stream);
+        console.log("Микрофон подключён:", stream.getAudioTracks()[0]?.label || "unknown");
+      } catch (err: any) {
+        const msg = `Ошибка микрофона: ${err.message || err.name || "Нет разрешения"}`;
+        console.error(msg);
+        setMediaError(msg);
+        return;
+      }
     }
 
-    if (source.type === "microphone" && !newEnabled) {
-      console.log("Микрофон выключен");
+    // Если выключаем микрофон
+    if (source.type === "microphone" && !newEnabled && micStream) {
+      micStream.getTracks().forEach((t) => t.stop());
+      setMicStream(null);
+      console.log("Микрофон отключён");
     }
 
     setSources((prev) => prev.map((s) => (s.id === sourceId ? { ...s, enabled: newEnabled } : s)));
-  }, [sources, cameraStream]);
+  }, [sources, cameraStream, micStream]);
 
   // Обновление источника (выбор устройства)
   const handleUpdateSource = useCallback(async (sourceId: string, updates: Partial<MediaSource>) => {
     setSources((prev) => prev.map((s) => (s.id === sourceId ? { ...s, ...updates } : s)));
 
-    // Если меняется устройство камеры — перезапустить поток
     const source = sources.find((s) => s.id === sourceId);
+
+    // Если меняется устройство камеры — перезапустить поток
     if (source?.type === "camera" && source.enabled && updates.deviceId && hasMediaDevices()) {
       if (cameraStream) {
         cameraStream.getTracks().forEach((t) => t.stop());
@@ -227,12 +265,31 @@ export default function App() {
         setMediaError(`Ошибка переключения камеры: ${err.message}`);
       }
     }
-  }, [sources, cameraStream]);
+
+    // Если меняется устройство микрофона
+    if (source?.type === "microphone" && source.enabled && updates.deviceId && hasMediaDevices()) {
+      if (micStream) {
+        micStream.getTracks().forEach((t) => t.stop());
+      }
+      try {
+        console.log("Переключение микрофона на:", updates.label || updates.deviceId);
+        const stream = await navigator.mediaDevices.getUserMedia({
+          audio: { deviceId: { exact: updates.deviceId } },
+          video: false,
+        });
+        setMicStream(stream);
+        console.log("Микрофон переключён:", stream.getAudioTracks()[0]?.label);
+      } catch (err: any) {
+        console.error("Ошибка переключения микрофона:", err.message);
+        setMediaError(`Ошибка переключения микрофона: ${err.message}`);
+      }
+    }
+  }, [sources, cameraStream, micStream]);
 
   // Определение платформы macOS
   const isMacOS = /mac/i.test(navigator.platform) || /mac/i.test(navigator.userAgent);
 
-  // Захват экрана с обработкой ограничений WKWebView на macOS
+  // Захват экрана
   const handleStartScreenCapture = useCallback(async (surface?: "monitor" | "window") => {
     const hasDisplayMedia = !!(
       navigator?.mediaDevices && typeof navigator.mediaDevices.getDisplayMedia === "function"
@@ -262,7 +319,6 @@ export default function App() {
       setScreenStream(stream);
       const track = stream.getVideoTracks()[0];
       console.log("Захват экрана начат:", track?.label || "экран");
-      // Обработка остановки захвата пользователем
       track.onended = () => {
         setScreenStream(null);
         console.log("Захват экрана остановлен пользователем");
@@ -270,8 +326,7 @@ export default function App() {
     } catch (err: any) {
       let msg = `Ошибка захвата экрана: ${err.message || "Отменено пользователем"}`;
       if (isMacOS) {
-        msg +=
-          " | macOS: проверьте разрешение «Запись экрана» в Системных настройках → Конфиденциальность и безопасность.";
+        msg += " | macOS: проверьте разрешение «Запись экрана» в Системных настройках.";
       }
       console.error(msg);
       setMediaError(msg);
@@ -285,6 +340,39 @@ export default function App() {
       console.log("Захват экрана остановлен");
     }
   }, [screenStream]);
+
+  // Управление эфиром с LiveKit
+  const handleSetLive = useCallback(async (live: boolean) => {
+    if (live) {
+      if (!config.serverUrl || !config.token) {
+        console.warn("Нельзя начать эфир: не указан сервер или токен");
+        return;
+      }
+
+      console.log("Подключение к LiveKit...");
+
+      // Собираем стрим с камерой и аудио для LiveKit
+      let combinedStream: MediaStream | null = null;
+      if (cameraStream || micStream) {
+        combinedStream = new MediaStream();
+        if (cameraStream) {
+          cameraStream.getVideoTracks().forEach((t) => combinedStream!.addTrack(t));
+        }
+        if (micStream) {
+          micStream.getAudioTracks().forEach((t) => combinedStream!.addTrack(t));
+        }
+      }
+
+      await liveKit.connect(config.serverUrl, config.token, combinedStream, screenStream);
+      setIsLive(true);
+      console.log("Эфир начат ✅");
+    } else {
+      console.log("Остановка эфира...");
+      await liveKit.disconnect();
+      setIsLive(false);
+      console.log("Эфир остановлен");
+    }
+  }, [config, cameraStream, screenStream, micStream, liveKit]);
 
   // Если не авторизован — показать экран входа
   if (!user) {
@@ -303,6 +391,7 @@ export default function App() {
         checking={checking}
         updateInfo={updateInfo}
         error={updateError}
+        installing={installing}
         onCheck={checkForUpdates}
         onDownload={openDownload}
         onDismiss={dismiss}
@@ -325,6 +414,7 @@ export default function App() {
         version={APP_VERSION}
         theme={theme}
         onToggleTheme={toggleTheme}
+        participantCount={liveKit.participantCount}
       />
 
       {/* Основной layout */}
@@ -351,6 +441,14 @@ export default function App() {
             <div className="media-error-banner">
               <span>⚠️ {mediaError}</span>
               <button onClick={() => setMediaError(null)}>✕</button>
+            </div>
+          )}
+
+          {/* Ошибка LiveKit */}
+          {liveKit.error && (
+            <div className="media-error-banner">
+              <span>⚠️ LiveKit: {liveKit.error}</span>
+              <button onClick={() => {}}>✕</button>
             </div>
           )}
 
@@ -385,7 +483,7 @@ export default function App() {
       {/* Нижняя панель управления */}
       <BottomBar
         isLive={isLive}
-        setIsLive={setIsLive}
+        setIsLive={handleSetLive}
         config={config}
         sources={sources}
         cameraStream={cameraStream}
@@ -400,6 +498,8 @@ export default function App() {
         showChat={showChat}
         hostToken={hostToken}
         roomId={roomId}
+        liveKitConnecting={liveKit.connecting}
+        participantCount={liveKit.participantCount}
       />
     </div>
   );

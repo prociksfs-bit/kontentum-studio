@@ -22,6 +22,8 @@ interface Props {
   showChat: boolean;
   hostToken: string;
   roomId: string;
+  liveKitConnecting?: boolean;
+  participantCount?: number;
 }
 
 /**
@@ -44,6 +46,8 @@ export default function BottomBar({
   showChat,
   hostToken,
   roomId,
+  liveKitConnecting,
+  participantCount,
 }: Props) {
   const [elapsed, setElapsed] = useState(0);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -59,26 +63,24 @@ export default function BottomBar({
     return `${h.toString().padStart(2, "0")}:${m.toString().padStart(2, "0")}:${s.toString().padStart(2, "0")}`;
   };
 
-  const handleStartStop = useCallback(() => {
+  const handleStartStop = useCallback(async () => {
     if (isLive) {
-      setIsLive(false);
+      await setIsLive(false);
       if (timerRef.current) {
         clearInterval(timerRef.current);
         timerRef.current = null;
       }
       setElapsed(0);
-      console.log("Эфир остановлен");
     } else {
       if (!config.serverUrl || !config.token) {
         console.warn("Нельзя начать эфир: не указан сервер или токен");
         return;
       }
-      setIsLive(true);
+      await setIsLive(true);
       setElapsed(0);
       timerRef.current = setInterval(() => {
         setElapsed((prev) => prev + 1);
       }, 1000);
-      console.log(`Эфир начат | Комната: ${config.roomName}`);
     }
   }, [isLive, config, setIsLive]);
 
@@ -193,11 +195,19 @@ export default function BottomBar({
         <button
           className="cb start-btn"
           onClick={handleStartStop}
-          disabled={!config.serverUrl || !config.token}
+          disabled={!config.serverUrl || !config.token || liveKitConnecting}
         >
-          <span className="ci">▶</span>
-          ЭФИР
+          <span className="ci">{liveKitConnecting ? "⏳" : "▶"}</span>
+          {liveKitConnecting ? "ПОДКЛЮЧЕНИЕ..." : "ЭФИР"}
         </button>
+      )}
+
+      {/* Счётчик зрителей */}
+      {isLive && participantCount !== undefined && participantCount > 0 && (
+        <div className="cb" style={{ cursor: "default", opacity: 0.7 }}>
+          <span className="ci">👥</span>
+          {participantCount}
+        </div>
       )}
 
       <div className="cb-sep" />
