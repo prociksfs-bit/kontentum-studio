@@ -10,6 +10,10 @@ interface Props {
   screenStream: MediaStream | null;
   onToggleSource: (id: string) => void;
   onOpenSettings: () => void;
+  onToggleLogs: () => void;
+  onCheckUpdates: () => void;
+  checkingUpdates: boolean;
+  showLogs: boolean;
   userName?: string;
 }
 
@@ -25,6 +29,10 @@ export default function Controls({
   screenStream,
   onToggleSource,
   onOpenSettings,
+  onToggleLogs,
+  onCheckUpdates,
+  checkingUpdates,
+  showLogs,
   userName,
 }: Props) {
   const [elapsed, setElapsed] = useState(0);
@@ -46,8 +54,10 @@ export default function Controls({
         timerRef.current = null;
       }
       setElapsed(0);
+      console.log("Эфир остановлен");
     } else {
       if (!config.serverUrl || !config.token) {
+        console.warn("Нельзя начать эфир: не указан сервер или токен");
         return;
       }
 
@@ -57,6 +67,7 @@ export default function Controls({
       timerRef.current = setInterval(() => {
         setElapsed((prev) => prev + 1);
       }, 1000);
+      console.log(`Эфир начат | Сервер: ${config.serverUrl}`);
     }
   }, [isLive, config, setIsLive]);
 
@@ -106,7 +117,7 @@ export default function Controls({
           onClick={() => camSource && onToggleSource(camSource.id)}
         >
           <span className="ci">📷</span>
-          {camSource?.enabled ? "Камера" : "Камера"}
+          Камера
         </button>
 
         {/* Микрофон */}
@@ -147,6 +158,26 @@ export default function Controls({
         <button className="cb" onClick={onOpenSettings}>
           <span className="ci">⚙️</span>
           Настройки
+        </button>
+
+        {/* Логи */}
+        <button
+          className={`cb ${showLogs ? "on" : ""}`}
+          onClick={onToggleLogs}
+        >
+          <span className="ci">📋</span>
+          Логи
+        </button>
+
+        {/* Обновления */}
+        <button
+          className="cb"
+          onClick={onCheckUpdates}
+          disabled={checkingUpdates}
+          style={checkingUpdates ? { opacity: 0.5 } : undefined}
+        >
+          <span className="ci">{checkingUpdates ? "⏳" : "🔄"}</span>
+          {checkingUpdates ? "Проверка..." : "Обновить"}
         </button>
 
         {/* Завершить */}

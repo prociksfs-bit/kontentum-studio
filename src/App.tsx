@@ -5,6 +5,10 @@ import Sidebar from "./components/Sidebar";
 import Preview from "./components/Preview";
 import Controls from "./components/Controls";
 import SettingsPanel from "./components/SettingsPanel";
+import LogPanel from "./components/LogPanel";
+import UpdateBanner from "./components/UpdateBanner";
+import { useAppLogger } from "./lib/useAppLogger";
+import { useUpdateChecker } from "./lib/useUpdateChecker";
 
 /** Конфигурация стрима */
 export interface StreamConfig {
@@ -41,6 +45,13 @@ function hasMediaDevices(): boolean {
 }
 
 export default function App() {
+  // Логгер
+  const { logs, clearLogs, exportLogs } = useAppLogger();
+  const [showLogs, setShowLogs] = useState(false);
+
+  // Обновления
+  const { checking, updateInfo, error: updateError, checkForUpdates, openDownload, dismiss } = useUpdateChecker();
+
   // Авторизация
   const [user, setUser] = useState<UserInfo | null>(null);
   const [view, setView] = useState<AppView>("main");
@@ -79,6 +90,7 @@ export default function App() {
       serverUrl: result.serverUrl,
       token: result.token,
     }));
+    console.log(`Авторизация: ${result.user.name} | Сервер: ${result.serverUrl ? "подключён" : "не указан"}`);
   }, []);
 
   // Переключение источника (камера/микрофон)
@@ -91,19 +103,32 @@ export default function App() {
 
       // Если включаем камеру — запустить поток
       if (source.type === "camera" && newEnabled && !cameraStream && hasMediaDevices()) {
+        console.log("Запуск камеры...");
         navigator.mediaDevices
           .getUserMedia({
             video: source.deviceId ? { deviceId: { exact: source.deviceId } } : true,
             audio: false,
           })
-          .then((stream) => setCameraStream(stream))
-          .catch((err) => console.error("Ошибка захвата камеры:", err));
+          .then((stream) => {
+            setCameraStream(stream);
+            console.log("Камера подключена:", stream.getVideoTracks()[0]?.label || "unknown");
+          })
+          .catch((err) => console.error("Ошибка захвата камеры:", err.message));
       }
 
       // Если выключаем камеру — остановить поток
       if (source.type === "camera" && !newEnabled && cameraStream) {
         cameraStream.getTracks().forEach((t) => t.stop());
         setCameraStream(null);
+        console.log("Камера отключена");
+      }
+
+      // Если включаем микрофон
+      if (source.type === "microphone" && newEnabled && hasMediaDevices()) {
+        console.log("Микрофон включён");
+      }
+      if (source.type === "microphone" && !newEnabled) {
+        console.log("Микрофон выключен");
       }
 
       return prev.map((s) => (s.id === sourceId ? { ...s, enabled: newEnabled } : s));
@@ -120,20 +145,28 @@ export default function App() {
       if (cameraStream) {
         cameraStream.getTracks().forEach((t) => t.stop());
       }
+      console.log("Переключение камеры на:", updates.label || updates.deviceId);
       navigator.mediaDevices
         .getUserMedia({
           video: { deviceId: { exact: updates.deviceId } },
           audio: false,
         })
-        .then((stream) => setCameraStream(stream))
-        .catch((err) => console.error("Ошибка переключения камеры:", err));
+        .then((stream) => {
+          setCameraStream(stream);
+          console.log("Камера переключена:", stream.getVideoTracks()[0]?.label);
+        })
+        .catch((err) => console.error("Ошибка переключения камеры:", err.message));
     }
   }, [sources, cameraStream]);
 
   // Захват экрана
   const handleStartScreenCapture = useCallback(() => {
-    if (!hasMediaDevices()) return;
+    if (!hasMediaDevices()) {
+      console.error("MediaDevices API недоступен");
+      return;
+    }
 
+    console.log("Запуск захвата экрана...");
     navigator.mediaDevices
       .getDisplayMedia({
         video: true,
@@ -141,16 +174,22 @@ export default function App() {
       })
       .then((stream) => {
         setScreenStream(stream);
+        const track = stream.getVideoTracks()[0];
+        console.log("Захват экрана начат:", track?.label || "экран");
         // Обработка остановки захвата пользователем
-        stream.getVideoTracks()[0].onended = () => setScreenStream(null);
+        track.onended = () => {
+          setScreenStream(null);
+          console.log("Захват экрана остановлен пользователем");
+        };
       })
-      .catch((err) => console.error("Ошибка захвата экрана:", err));
+      .catch((err) => console.error("Ошибка захвата экрана:", err.message));
   }, []);
 
   const handleStopScreenCapture = useCallback(() => {
     if (screenStream) {
       screenStream.getTracks().forEach((t) => t.stop());
       setScreenStream(null);
+      console.log("Захват экрана остановлен");
     }
   }, [screenStream]);
 
@@ -165,6 +204,16 @@ export default function App() {
       <div className="orb o1" />
       <div className="orb o2" />
       <div className="orb o3" />
+
+      {/* Баннер обновлений */}
+      <UpdateBanner
+        checking={checking}
+        updateInfo={updateInfo}
+        error={updateError}
+        onCheck={checkForUpdates}
+        onDownload={openDownload}
+        onDismiss={dismiss}
+      />
 
       {/* Модалки */}
       {view === "settings" && (
@@ -185,6 +234,10 @@ export default function App() {
         screenStream={screenStream}
         onToggleSource={handleToggleSource}
         onOpenSettings={() => setView("settings")}
+        onToggleLogs={() => setShowLogs((v) => !v)}
+        onCheckUpdates={checkForUpdates}
+        checkingUpdates={checking}
+        showLogs={showLogs}
         userName={user.name}
       />
 
@@ -214,6 +267,15 @@ export default function App() {
             cameraCrop={cameraCrop}
             screenCrop={screenCrop}
             pipShape={pipShape}
+          />
+
+          {/* Панель логов */}
+          <LogPanel
+            logs={logs}
+            visible={showLogs}
+            onClose={() => setShowLogs(false)}
+            onClear={clearLogs}
+            onExport={exportLogs}
           />
         </div>
       </div>

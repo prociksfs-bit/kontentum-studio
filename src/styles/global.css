@@ -1069,3 +1069,259 @@ body::before {
 ::-webkit-scrollbar-thumb:hover {
   background: rgba(0, 245, 255, 0.3);
 }
+
+/* === LOG PANEL === */
+.log-panel {
+  height: 220px;
+  min-height: 120px;
+  display: flex;
+  flex-direction: column;
+  background: rgba(0, 4, 14, 0.95);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  overflow: hidden;
+  flex-shrink: 0;
+}
+
+.log-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 12px;
+  background: rgba(0, 8, 24, 0.9);
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+}
+
+.log-title {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 10px;
+  letter-spacing: 2px;
+  color: var(--muted);
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.log-filters {
+  display: flex;
+  gap: 2px;
+  margin-left: 8px;
+}
+
+.log-filter-btn {
+  padding: 2px 6px;
+  border-radius: 4px;
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+  font-size: 9px;
+  font-weight: 600;
+  font-family: 'JetBrains Mono', monospace;
+  transition: all 0.15s;
+}
+
+.log-filter-btn:hover {
+  background: rgba(0, 245, 255, 0.06);
+}
+
+.log-filter-btn.active {
+  border-color: rgba(0, 245, 255, 0.2);
+  background: rgba(0, 245, 255, 0.08);
+  color: var(--cyan);
+}
+
+.log-actions {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.log-count {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 9px;
+  color: var(--muted);
+  background: rgba(0, 245, 255, 0.06);
+  padding: 1px 6px;
+  border-radius: 4px;
+}
+
+.log-action-btn {
+  padding: 2px 8px;
+  border-radius: 4px;
+  border: 1px solid rgba(0, 245, 255, 0.1);
+  background: rgba(0, 15, 40, 0.5);
+  color: var(--muted);
+  cursor: pointer;
+  font-size: 10px;
+  font-family: 'Exo 2', sans-serif;
+  transition: all 0.15s;
+  white-space: nowrap;
+}
+
+.log-action-btn:hover {
+  border-color: rgba(0, 245, 255, 0.3);
+  color: var(--text);
+}
+
+.log-close-btn {
+  background: none;
+  border: none;
+  color: var(--muted);
+  font-size: 14px;
+  cursor: pointer;
+  padding: 0 4px;
+  transition: color 0.15s;
+}
+
+.log-close-btn:hover {
+  color: var(--red);
+}
+
+.log-content {
+  flex: 1;
+  overflow-y: auto;
+  padding: 4px 0;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 11px;
+  line-height: 1.6;
+}
+
+.log-empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.log-entry {
+  display: flex;
+  gap: 8px;
+  padding: 1px 12px;
+  transition: background 0.1s;
+}
+
+.log-entry:hover {
+  background: rgba(0, 245, 255, 0.03);
+}
+
+.log-entry.log-error {
+  background: rgba(255, 30, 50, 0.04);
+}
+
+.log-entry.log-warn {
+  background: rgba(255, 170, 0, 0.03);
+}
+
+.log-time {
+  color: var(--muted);
+  flex-shrink: 0;
+  font-size: 10px;
+  opacity: 0.7;
+}
+
+.log-level {
+  font-weight: 700;
+  flex-shrink: 0;
+  width: 28px;
+  font-size: 9px;
+}
+
+.log-msg {
+  color: var(--text);
+  word-break: break-all;
+  white-space: pre-wrap;
+}
+
+/* === UPDATE BANNER === */
+.update-banner {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 16px;
+  font-size: 12px;
+  z-index: 20;
+  position: relative;
+}
+
+.update-banner.available {
+  background: rgba(0, 255, 157, 0.08);
+  border-bottom: 1px solid rgba(0, 255, 157, 0.2);
+  color: var(--green);
+}
+
+.update-banner.uptodate {
+  background: rgba(0, 85, 255, 0.06);
+  border-bottom: 1px solid rgba(0, 85, 255, 0.15);
+  color: var(--cyan);
+}
+
+.update-banner.error-banner {
+  background: rgba(255, 170, 0, 0.06);
+  border-bottom: 1px solid rgba(255, 170, 0, 0.15);
+  color: var(--amber);
+}
+
+.update-icon {
+  font-size: 16px;
+  flex-shrink: 0;
+}
+
+.update-text {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.update-text strong {
+  font-size: 12px;
+}
+
+.update-sub {
+  font-size: 10px;
+  opacity: 0.7;
+}
+
+.update-btn {
+  padding: 4px 12px;
+  border-radius: 6px;
+  border: 1px solid rgba(0, 245, 255, 0.15);
+  background: rgba(0, 15, 40, 0.5);
+  color: var(--text);
+  cursor: pointer;
+  font-size: 11px;
+  font-weight: 600;
+  font-family: 'Exo 2', sans-serif;
+  transition: all 0.15s;
+  white-space: nowrap;
+}
+
+.update-btn:hover {
+  border-color: rgba(0, 245, 255, 0.3);
+  background: rgba(0, 245, 255, 0.08);
+}
+
+.update-btn.download {
+  background: rgba(0, 255, 157, 0.15);
+  border-color: rgba(0, 255, 157, 0.3);
+  color: var(--green);
+}
+
+.update-btn.download:hover {
+  background: rgba(0, 255, 157, 0.25);
+}
+
+.update-btn.dismiss {
+  background: none;
+  border: none;
+  color: var(--muted);
+  font-size: 14px;
+  padding: 2px 6px;
+}
+
+.update-btn.dismiss:hover {
+  color: var(--red);
+}
