@@ -1325,3 +1325,60 @@ body::before {
 .update-btn.dismiss:hover {
   color: var(--red);
 }
+
+/* === MEDIA ERROR BANNER === */
+.media-error-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 8px 14px;
+  background: rgba(255, 30, 50, 0.08);
+  border: 1px solid rgba(255, 30, 50, 0.25);
+  border-radius: 10px;
+  font-size: 12px;
+  color: var(--red);
+  flex-shrink: 0;
+}
+
+.media-error-banner button {
+  background: none;
+  border: none;
+  color: var(--muted);
+  font-size: 14px;
+  cursor: pointer;
+  padding: 0 4px;
+  transition: color 0.15s;
+}
+
+.media-error-banner button:hover {
+  color: var(--red);
+}
+
+/* Header version */
+.hdr-version {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 9px;
+  color: var(--muted);
+  opacity: 0.5;
+  margin-left: 6px;
+}
+
+/* Start button styling */
+.cb.start-btn {
+  background: rgba(0, 255, 157, 0.12);
+  border-color: rgba(0, 255, 157, 0.4);
+  color: var(--green);
+}
+
+.cb.start-btn:hover {
+  background: rgba(0, 255, 157, 0.2);
+  box-shadow: 0 0 20px rgba(0, 255, 157, 0.15);
+}
+
+.cb.start-btn:disabled {
+  opacity: 0.3;
+  cursor: not-allowed;
+  transform: none;
+  box-shadow: none;
+}

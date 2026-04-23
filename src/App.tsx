@@ -3,7 +3,8 @@ import AuthScreen from "./components/AuthScreen";
 import type { AuthResult, UserInfo } from "./components/AuthScreen";
 import Sidebar from "./components/Sidebar";
 import Preview from "./components/Preview";
-import Controls from "./components/Controls";
+import HeaderBar from "./components/HeaderBar";
+import BottomBar from "./components/BottomBar";
 import SettingsPanel from "./components/SettingsPanel";
 import LogPanel from "./components/LogPanel";
 import UpdateBanner from "./components/UpdateBanner";
@@ -30,7 +31,7 @@ export interface MediaSource {
 }
 
 /** Настройки обрезки */
-interface CropSettings {
+export interface CropSettings {
   top: number;
   bottom: number;
   left: number;
@@ -41,13 +42,16 @@ export type AppView = "main" | "settings";
 
 /** Проверка доступности MediaDevices API */
 function hasMediaDevices(): boolean {
-  return !!(navigator && navigator.mediaDevices);
+  return !!(navigator && navigator.mediaDevices && navigator.mediaDevices.getUserMedia);
 }
+
+declare const __APP_VERSION__: string;
+const APP_VERSION = typeof __APP_VERSION__ !== "undefined" ? __APP_VERSION__ : "0.0.0";
 
 export default function App() {
   // Логгер
   const { logs, clearLogs, exportLogs } = useAppLogger();
-  const [showLogs, setShowLogs] = useState(false);
+  const [showLogs, setShowLogs] = useState(true); // Логи видимы по умолчанию
 
   // Обновления
   const { checking, updateInfo, error: updateError, checkForUpdates, openDownload, dismiss } = useUpdateChecker();
@@ -56,6 +60,9 @@ export default function App() {
   const [user, setUser] = useState<UserInfo | null>(null);
   const [view, setView] = useState<AppView>("main");
   const [isLive, setIsLive] = useState(false);
+
+  // Ошибка медиа
+  const [mediaError, setMediaError] = useState<string | null>(null);
 
   const [config, setConfig] = useState<StreamConfig>({
     serverUrl: "",
@@ -82,6 +89,13 @@ export default function App() {
   // Форма PiP
   const [pipShape, setPipShape] = useState<"rect" | "round">("rect");
 
+  // Лог при старте
+  useState(() => {
+    console.log(`КОНТЕНТУМ Studio v${APP_VERSION} запущен`);
+    console.log(`Платформа: ${navigator.platform}`);
+    console.log(`MediaDevices API: ${hasMediaDevices() ? "доступен" : "НЕДОСТУПЕН"}`);
+  });
+
   // Авторизация
   const handleAuth = useCallback((result: AuthResult) => {
     setUser(result.user);
@@ -94,49 +108,66 @@ export default function App() {
   }, []);
 
   // Переключение источника (камера/микрофон)
-  const handleToggleSource = useCallback((sourceId: string) => {
-    setSources((prev) => {
-      const source = prev.find((s) => s.id === sourceId);
-      if (!source) return prev;
+  const handleToggleSource = useCallback(async (sourceId: string) => {
+    const source = sources.find((s) => s.id === sourceId);
+    if (!source) return;
 
-      const newEnabled = !source.enabled;
+    const newEnabled = !source.enabled;
+    setMediaError(null);
 
-      // Если включаем камеру — запустить поток
-      if (source.type === "camera" && newEnabled && !cameraStream && hasMediaDevices()) {
+    // Если включаем камеру — запустить поток
+    if (source.type === "camera" && newEnabled && !cameraStream) {
+      if (!hasMediaDevices()) {
+        const msg = "MediaDevices API недоступен. Камера не может быть подключена.";
+        console.error(msg);
+        setMediaError(msg);
+        return;
+      }
+
+      try {
         console.log("Запуск камеры...");
-        navigator.mediaDevices
-          .getUserMedia({
-            video: source.deviceId ? { deviceId: { exact: source.deviceId } } : true,
-            audio: false,
-          })
-          .then((stream) => {
-            setCameraStream(stream);
-            console.log("Камера подключена:", stream.getVideoTracks()[0]?.label || "unknown");
-          })
-          .catch((err) => console.error("Ошибка захвата камеры:", err.message));
+        const constraints: MediaStreamConstraints = {
+          video: source.deviceId ? { deviceId: { exact: source.deviceId } } : true,
+          audio: false,
+        };
+        const stream = await navigator.mediaDevices.getUserMedia(constraints);
+        setCameraStream(stream);
+        console.log("Камера подключена:", stream.getVideoTracks()[0]?.label || "unknown");
+      } catch (err: any) {
+        const msg = `Ошибка камеры: ${err.message || err.name || "Нет разрешения"}`;
+        console.error(msg);
+        setMediaError(msg);
+        return;
       }
+    }
 
-      // Если выключаем камеру — остановить поток
-      if (source.type === "camera" && !newEnabled && cameraStream) {
-        cameraStream.getTracks().forEach((t) => t.stop());
-        setCameraStream(null);
-        console.log("Камера отключена");
-      }
+    // Если выключаем камеру — остановить поток
+    if (source.type === "camera" && !newEnabled && cameraStream) {
+      cameraStream.getTracks().forEach((t) => t.stop());
+      setCameraStream(null);
+      console.log("Камера отключена");
+    }
 
-      // Если включаем микрофон
-      if (source.type === "microphone" && newEnabled && hasMediaDevices()) {
-        console.log("Микрофон включён");
+    // Если включаем микрофон
+    if (source.type === "microphone" && newEnabled) {
+      if (!hasMediaDevices()) {
+        const msg = "MediaDevices API недоступен. Микрофон не может быть подключён.";
+        console.error(msg);
+        setMediaError(msg);
+        return;
       }
-      if (source.type === "microphone" && !newEnabled) {
-        console.log("Микрофон выключен");
-      }
+      console.log("Микрофон включён");
+    }
 
-      return prev.map((s) => (s.id === sourceId ? { ...s, enabled: newEnabled } : s));
-    });
-  }, [cameraStream]);
+    if (source.type === "microphone" && !newEnabled) {
+      console.log("Микрофон выключен");
+    }
+
+    setSources((prev) => prev.map((s) => (s.id === sourceId ? { ...s, enabled: newEnabled } : s)));
+  }, [sources, cameraStream]);
 
   // Обновление источника (выбор устройства)
-  const handleUpdateSource = useCallback((sourceId: string, updates: Partial<MediaSource>) => {
+  const handleUpdateSource = useCallback(async (sourceId: string, updates: Partial<MediaSource>) => {
     setSources((prev) => prev.map((s) => (s.id === sourceId ? { ...s, ...updates } : s)));
 
     // Если меняется устройство камеры — перезапустить поток
@@ -145,44 +176,49 @@ export default function App() {
       if (cameraStream) {
         cameraStream.getTracks().forEach((t) => t.stop());
       }
-      console.log("Переключение камеры на:", updates.label || updates.deviceId);
-      navigator.mediaDevices
-        .getUserMedia({
+      try {
+        console.log("Переключение камеры на:", updates.label || updates.deviceId);
+        const stream = await navigator.mediaDevices.getUserMedia({
           video: { deviceId: { exact: updates.deviceId } },
           audio: false,
-        })
-        .then((stream) => {
-          setCameraStream(stream);
-          console.log("Камера переключена:", stream.getVideoTracks()[0]?.label);
-        })
-        .catch((err) => console.error("Ошибка переключения камеры:", err.message));
+        });
+        setCameraStream(stream);
+        console.log("Камера переключена:", stream.getVideoTracks()[0]?.label);
+      } catch (err: any) {
+        console.error("Ошибка переключения камеры:", err.message);
+        setMediaError(`Ошибка переключения камеры: ${err.message}`);
+      }
     }
   }, [sources, cameraStream]);
 
   // Захват экрана
-  const handleStartScreenCapture = useCallback(() => {
+  const handleStartScreenCapture = useCallback(async () => {
     if (!hasMediaDevices()) {
-      console.error("MediaDevices API недоступен");
+      const msg = "MediaDevices API недоступен. Захват экрана невозможен.";
+      console.error(msg);
+      setMediaError(msg);
       return;
     }
 
-    console.log("Запуск захвата экрана...");
-    navigator.mediaDevices
-      .getDisplayMedia({
+    try {
+      console.log("Запуск захвата экрана...");
+      const stream = await navigator.mediaDevices.getDisplayMedia({
         video: true,
         audio: true,
-      })
-      .then((stream) => {
-        setScreenStream(stream);
-        const track = stream.getVideoTracks()[0];
-        console.log("Захват экрана начат:", track?.label || "экран");
-        // Обработка остановки захвата пользователем
-        track.onended = () => {
-          setScreenStream(null);
-          console.log("Захват экрана остановлен пользователем");
-        };
-      })
-      .catch((err) => console.error("Ошибка захвата экрана:", err.message));
+      });
+      setScreenStream(stream);
+      const track = stream.getVideoTracks()[0];
+      console.log("Захват экрана начат:", track?.label || "экран");
+      // Обработка остановки захвата пользователем
+      track.onended = () => {
+        setScreenStream(null);
+        console.log("Захват экрана остановлен пользователем");
+      };
+    } catch (err: any) {
+      const msg = `Ошибка захвата экрана: ${err.message || "Отменено пользователем"}`;
+      console.error(msg);
+      setMediaError(msg);
+    }
   }, []);
 
   const handleStopScreenCapture = useCallback(() => {
@@ -224,23 +260,15 @@ export default function App() {
         />
       )}
 
-      {/* Основной layout */}
-      <Controls
+      {/* Шапка */}
+      <HeaderBar
         isLive={isLive}
-        setIsLive={setIsLive}
         config={config}
-        sources={sources}
-        cameraStream={cameraStream}
-        screenStream={screenStream}
-        onToggleSource={handleToggleSource}
-        onOpenSettings={() => setView("settings")}
-        onToggleLogs={() => setShowLogs((v) => !v)}
-        onCheckUpdates={checkForUpdates}
-        checkingUpdates={checking}
-        showLogs={showLogs}
         userName={user.name}
+        version={APP_VERSION}
       />
 
+      {/* Основной layout */}
       <div className="app-layout">
         <Sidebar
           sources={sources}
@@ -259,6 +287,14 @@ export default function App() {
         />
 
         <div className="app-center">
+          {/* Ошибка медиа */}
+          {mediaError && (
+            <div className="media-error-banner">
+              <span>⚠️ {mediaError}</span>
+              <button onClick={() => setMediaError(null)}>✕</button>
+            </div>
+          )}
+
           <Preview
             sources={sources}
             cameraStream={cameraStream}
@@ -279,6 +315,22 @@ export default function App() {
           />
         </div>
       </div>
+
+      {/* Нижняя панель управления */}
+      <BottomBar
+        isLive={isLive}
+        setIsLive={setIsLive}
+        config={config}
+        sources={sources}
+        cameraStream={cameraStream}
+        screenStream={screenStream}
+        onToggleSource={handleToggleSource}
+        onOpenSettings={() => setView("settings")}
+        onToggleLogs={() => setShowLogs((v) => !v)}
+        onCheckUpdates={checkForUpdates}
+        checkingUpdates={checking}
+        showLogs={showLogs}
+      />
     </div>
   );
 }

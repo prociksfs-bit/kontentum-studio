@@ -1,0 +1,12 @@
+{
+  "$schema": "https://raw.githubusercontent.com/nicedoc/schemas/main/tauri/capability.json",
+  "identifier": "default",
+  "description": "Main capability for the КОНТЕНТУМ Studio app",
+  "windows": ["main"],
+  "permissions": [
+    "core:default",
+    "shell:allow-open",
+    "dialog:default",
+    "fs:default"
+  ]
+}
